@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 )
 
@@ -24,4 +25,14 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+
+	decoder := json.NewDecoder(r.Body)
+	var report CSPReport
+
+	err := decoder.Decode(&report)
+	if err != nil {
+		panic(err)
+	}
+	defer r.Body.Close()
+
 }
