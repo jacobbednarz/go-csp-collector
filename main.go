@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -24,6 +25,7 @@ func main() {
 	http.HandleFunc("/", handleViolationReport)
 	http.ListenAndServe(":80", nil)
 }
+
 func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -39,9 +41,51 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+	reportValidation := validateViolation(report)
+	if reportValidation != nil {
+		fmt.Println(reportValidation)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
 	reportData := formatReport(report)
 	log.Println(reportData)
+}
+
+func validateViolation(r CSPReport) error {
+	ignoredBlockedURIs := []string{
+		"resource://",
+		"chromenull://",
+		"chrome-extension://",
+		"safari-extension://",
+		"mxjscall://",
+		"webviewprogressproxy://",
+		"res://",
+		"mx://",
+		"safari-resource://",
+		"chromenull://",
+		"chromeinvoke://",
+		"chromeinvokeimmediate://",
+		"mbinit://",
+		"opera://",
+		"localhost",
+		"127.0.0.1",
+		"none://",
+		"chromenull://",
+		"resource://",
+		"about:blank",
+	}
+
+	for _, value := range ignoredBlockedURIs {
+		if strings.HasPrefix(r.Body.BlockedURI, value) == true {
+			err := errors.New("Blocked URI is an invalid resource.")
+			return err
+		}
+	}
+
+	return nil
+}
+
 func formatReport(r CSPReport) string {
 	s := []string{}
 
