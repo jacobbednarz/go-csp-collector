@@ -20,4 +20,8 @@ func main() {
 	http.ListenAndServe(":80", nil)
 }
 func handleViolationReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
 }
