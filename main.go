@@ -78,7 +78,7 @@ func validateViolation(r CSPReport) error {
 
 	for _, value := range ignoredBlockedURIs {
 		if strings.HasPrefix(r.Body.BlockedURI, value) == true {
-			err := errors.New("Blocked URI is an invalid resource.")
+			err := errors.New(fmt.Sprintf("Blocked URI ('%s') is an invalid resource.", value))
 			return err
 		}
 	}
