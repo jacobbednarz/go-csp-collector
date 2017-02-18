@@ -49,6 +49,10 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reportData := formatReport(report)
+
+	// Set flag to 0 here so that we control the logger output here and it doesn't
+	// prefix everything with an additional timestamp.
+	log.SetFlags(0)
 	log.Println(reportData)
 }
 
