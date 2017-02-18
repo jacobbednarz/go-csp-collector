@@ -2,7 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
+	"strings"
+	"time"
 )
 
 type CSPReport struct {
@@ -35,4 +39,19 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+
+	reportData := formatReport(report)
+	log.Println(reportData)
+func formatReport(r CSPReport) string {
+	s := []string{}
+
+	s = append(s, fmt.Sprintf(`timestamp="%s"`, time.Now()))
+	s = append(s, fmt.Sprintf(`document-uri="%s"`, r.Body.DocumentURI))
+	s = append(s, fmt.Sprintf(`referrer="%s"`, r.Body.Referrer))
+	s = append(s, fmt.Sprintf(`blocked-uri="%s"`, r.Body.BlockedURI))
+	s = append(s, fmt.Sprintf(`violated-directive="%s"`, r.Body.ViolatedDirective))
+	s = append(s, fmt.Sprintf(`effective-directive="%s"`, r.Body.EffectiveDirective))
+	s = append(s, fmt.Sprintf(`original-policy="%s"`, r.Body.OriginalPolicy))
+
+	return strings.Join(s, " ")
 }
