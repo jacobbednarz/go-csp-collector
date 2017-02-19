@@ -30,4 +30,11 @@ redirecting the output into a file like so:
 $ ./csp_collector 2>> /path/to/violations.log
 ```
 
+### Visualisation
+
+This project purposely doesn't try to solve the problem of visualing the
+violation data because there are already a bunch of great solutions out
+there. Once you have your violations being collected, be sure to slurp
+them into your favourite log aggregation tool.
+
 [1]: https://github.com/jacobbednarz/go-csp-collector/blob/master/csp_collector.go#L60-L81
