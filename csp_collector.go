@@ -43,8 +43,7 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 
 	reportValidation := validateViolation(report)
 	if reportValidation != nil {
-		fmt.Println(reportValidation)
-		w.WriteHeader(http.StatusBadRequest)
+		http.Error(w, reportValidation.Error(), http.StatusBadRequest)
 		return
 	}
 
