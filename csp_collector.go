@@ -77,6 +77,9 @@ func validateViolation(r CSPReport) error {
 		"chromenull://",
 		"resource://",
 		"about:blank",
+		"android-webview",
+		"ms-browser-extension",
+		"http://adblockers.opera-mini.net",
 	}
 
 	for _, value := range ignoredBlockedURIs {
