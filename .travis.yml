@@ -8,3 +8,4 @@ install:
   - go get -d -v ./...
 script:
   - go build -v csp_collector.go
+  - go test -v
