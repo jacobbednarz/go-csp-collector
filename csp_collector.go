@@ -66,7 +66,6 @@ func validateViolation(r CSPReport) error {
 		"res://",
 		"mx://",
 		"safari-resource://",
-		"chromenull://",
 		"chromeinvoke://",
 		"chromeinvokeimmediate://",
 		"mbinit://",
@@ -74,8 +73,6 @@ func validateViolation(r CSPReport) error {
 		"localhost",
 		"127.0.0.1",
 		"none://",
-		"chromenull://",
-		"resource://",
 		"about:blank",
 	}
 
