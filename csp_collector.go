@@ -74,6 +74,8 @@ func validateViolation(r CSPReport) error {
 		"127.0.0.1",
 		"none://",
 		"about:blank",
+		"android-webview",
+		"ms-browser-extension",
 	}
 
 	for _, value := range ignoredBlockedURIs {
