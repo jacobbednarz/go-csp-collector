@@ -97,7 +97,7 @@ func validateViolation(r CSPReport) error {
 func formatReport(r CSPReport) string {
 	s := []string{}
 
-	s = append(s, fmt.Sprintf(`timestamp="%s"`, time.Now()))
+	s = append(s, fmt.Sprintf(`timestamp="%s"`, time.Now().UTC().Format("2006-01-02T15:04:05Z07:00")))
 	s = append(s, fmt.Sprintf(`document-uri="%s"`, r.Body.DocumentURI))
 	s = append(s, fmt.Sprintf(`referrer="%s"`, r.Body.Referrer))
 	s = append(s, fmt.Sprintf(`blocked-uri="%s"`, r.Body.BlockedURI))
