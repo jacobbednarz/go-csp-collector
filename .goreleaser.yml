@@ -1,0 +1,6 @@
+builds:
+  - binary: csp-collector
+    goos:
+      - linux
+    goarch:
+      - amd64
