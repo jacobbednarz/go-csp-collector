@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -86,7 +85,7 @@ func validateViolation(r CSPReport) error {
 
 	for _, value := range ignoredBlockedURIs {
 		if strings.HasPrefix(r.Body.BlockedURI, value) == true {
-			err := errors.New(fmt.Sprintf("Blocked URI ('%s') is an invalid resource.", value))
+			err := fmt.Errorf("Blocked URI ('%s') is an invalid resource.", value)
 			return err
 		}
 	}
