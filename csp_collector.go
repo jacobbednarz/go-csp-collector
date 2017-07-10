@@ -22,6 +22,7 @@ type CSPReport struct {
 }
 
 func main() {
+	log.Println("Starting up...")
 	http.HandleFunc("/", handleViolationReport)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
