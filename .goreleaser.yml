@@ -1,0 +1,7 @@
+builds:
+  - binary: csp-collector
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
