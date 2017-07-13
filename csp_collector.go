@@ -2,9 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -20,8 +23,27 @@ type CSPReport struct {
 	} `json:"csp-report"`
 }
 
+var (
+	Debug *log.Logger
+
+	// Flag for toggling verbose output.
+	debugFlag bool
+)
+
+func setupDebugLogger(debugHandle io.Writer) {
+	Debug = log.New(debugHandle, "[DEBUG] ", log.Lmicroseconds)
+}
+
 func main() {
-	log.Println("Starting up...")
+	setupDebugLogger(os.Stdout)
+
+	flag.BoolVar(&debugFlag, "debug", false, "Output additional logging for debugging")
+	flag.Parse()
+
+	if debugFlag {
+		Debug.Println("Starting up...")
+	}
+
 	http.HandleFunc("/", handleViolationReport)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
