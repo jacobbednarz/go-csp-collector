@@ -13,7 +13,7 @@ func TestHandlerForDisallowedMethods(t *testing.T) {
 	for _, method := range disallowedMethods {
 		for _, url := range randomUrls {
 			t.Run(method+url, func(t *testing.T) {
-				request, err := http.NewRequest(method, "localhost:8080"+url, nil)
+				request, err := http.NewRequest(method, url, nil)
 				if err != nil {
 					t.Fatalf("Failed to create request: %v", err)
 				}
@@ -24,7 +24,7 @@ func TestHandlerForDisallowedMethods(t *testing.T) {
 				defer response.Body.Close()
 
 				if response.StatusCode != http.StatusMethodNotAllowed {
-					t.Errorf("Expected HTTP status %v; got %v", http.StatusMethodNotAllowed, response.Status)
+					t.Errorf("Expected HTTP status %v; got %v", http.StatusMethodNotAllowed, response.StatusCode)
 				}
 			})
 		}
