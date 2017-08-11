@@ -15,7 +15,7 @@ func TestHandlerForDisallowedMethods(t *testing.T) {
 			t.Run(method+url, func(t *testing.T) {
 				request, err := http.NewRequest(method, url, nil)
 				if err != nil {
-					t.Fatalf("Failed to create request: %v", err)
+					t.Fatalf("failed to create request: %v", err)
 				}
 				recorder := httptest.NewRecorder()
 				handleViolationReport(recorder, request)
@@ -24,7 +24,7 @@ func TestHandlerForDisallowedMethods(t *testing.T) {
 				defer response.Body.Close()
 
 				if response.StatusCode != http.StatusMethodNotAllowed {
-					t.Errorf("Expected HTTP status %v; got %v", http.StatusMethodNotAllowed, response.StatusCode)
+					t.Errorf("expected HTTP status %v; got %v", http.StatusMethodNotAllowed, response.StatusCode)
 				}
 			})
 		}
@@ -34,7 +34,7 @@ func TestHandlerForDisallowedMethods(t *testing.T) {
 func TestHandlerForAllowingHealthcheck(t *testing.T) {
 	request, err := http.NewRequest("GET", "/_healthcheck", nil)
 	if err != nil {
-		t.Fatalf("Failed to create request: %v", err)
+		t.Fatalf("failed to create request: %v", err)
 	}
 	recorder := httptest.NewRecorder()
 
@@ -44,6 +44,6 @@ func TestHandlerForAllowingHealthcheck(t *testing.T) {
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		t.Errorf("Expected HTTP status %v; got %v", http.StatusOK, response.StatusCode)
+		t.Errorf("expected HTTP status %v; got %v", http.StatusOK, response.StatusCode)
 	}
 }
