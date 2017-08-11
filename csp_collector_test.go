@@ -50,6 +50,27 @@ func TestHandlerForAllowingHealthcheck(t *testing.T) {
 		t.Errorf("expected HTTP status %v; got %v", http.StatusOK, response.StatusCode)
 	}
 }
+func TestFormattedOutputIncludesEmptyKeysForRequiredValues(t *testing.T) {
+	var rawReport = []byte(`{
+		"csp-report": {
+			"document-uri": "http://example.com/signup.html",
+			"referrer": ""
+		}
+	}`)
+
+	var report CSPReport
+	err := json.Unmarshal(rawReport, &report)
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+
+	formattedReportOutput := formatReport(report)
+
+	if !strings.Contains(formattedReportOutput, "referrer=\"\"") {
+		t.Errorf("expected to find empty 'referrer' value but did not")
+	}
+}
+
 func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 	invalidBlockedURIs := []string{
 		"resource://",
