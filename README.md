@@ -14,6 +14,8 @@ unactionable reports. Check out the [full list][1] if you're interested.
 $ go get github.com/jacobbednarz/go-csp-collector
 ```
 
+Alternatively, you can download the binaries from the [release page][2].
+
 ### Running
 
 ```sh
@@ -37,4 +39,5 @@ violation data because there are already a bunch of great solutions out
 there. Once you have your violations being collected, be sure to slurp
 them into your favourite log aggregation tool.
 
-[1]: https://github.com/jacobbednarz/go-csp-collector/blob/master/csp_collector.go#L60-L81
+[1]: https://github.com/jacobbednarz/go-csp-collector/blob/36dacd76a257a9863d4ffb2482b1034558752587/csp_collector.go#L86-L106
+[2]: https://github.com/jacobbednarz/go-csp-collector/releases
