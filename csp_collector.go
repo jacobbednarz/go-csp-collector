@@ -64,7 +64,8 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 
 	err := decoder.Decode(&report)
 	if err != nil {
-		panic(err)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		return
 	}
 	defer r.Body.Close()
 
@@ -107,7 +108,7 @@ func validateViolation(r CSPReport) error {
 
 	for _, value := range ignoredBlockedURIs {
 		if strings.HasPrefix(r.Body.BlockedURI, value) == true {
-			err := fmt.Errorf("Blocked URI ('%s') is an invalid resource.", value)
+			err := fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
 			return err
 		}
 	}

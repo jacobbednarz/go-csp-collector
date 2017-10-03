@@ -137,7 +137,7 @@ func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 				t.Errorf("expected error to be raised but it didn't")
 			}
 
-			if validateErr.Error() != fmt.Sprintf("Blocked URI ('%s') is an invalid resource.", blockedURI) {
+			if validateErr.Error() != fmt.Sprintf("blocked URI ('%s') is an invalid resource", blockedURI) {
 				t.Errorf("expected error to include correct message string but it didn't")
 			}
 		})
