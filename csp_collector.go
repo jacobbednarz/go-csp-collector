@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+// CSPReport is the structure of the HTTP payload the system receives.
 type CSPReport struct {
 	Body struct {
 		DocumentURI        string `json:"document-uri"`
@@ -24,14 +25,14 @@ type CSPReport struct {
 }
 
 var (
-	Debug *log.Logger
+	debug *log.Logger
 
 	// Flag for toggling verbose output.
 	debugFlag bool
 )
 
 func setupDebugLogger(debugHandle io.Writer) {
-	Debug = log.New(debugHandle, "[DEBUG] ", log.Lmicroseconds)
+	debug = log.New(debugHandle, "[DEBUG] ", log.Lmicroseconds)
 }
 
 func main() {
@@ -41,7 +42,7 @@ func main() {
 	flag.Parse()
 
 	if debugFlag {
-		Debug.Println("Starting up...")
+		debug.Println("Starting up...")
 	}
 
 	http.HandleFunc("/", handleViolationReport)
