@@ -23,7 +23,7 @@ script:
   - golint -set_exit_status .
   - go vet $(go list ./... | grep -v /vendor/)
   - go test -v -race ./...
-  - if [ "${LATEST}" = "true" ]; then gox -os="linux darwin windows" -arch="amd64" -output="csp-collector.{{.OS}}.{{.Arch}}" -verbose ./...; fi
+  - if [ "${LATEST}" = "true" ]; then gox -os="linux darwin windows" -arch="amd64" -output="csp-collector.{{.OS}}.{{.Arch}}" -ldflags "-X main.Rev=`git rev-parse --short HEAD`" -verbose ./...; fi
 
 deploy:
   provider: releases

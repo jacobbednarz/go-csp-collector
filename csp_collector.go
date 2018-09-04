@@ -25,6 +25,10 @@ type CSPReport struct {
 }
 
 var (
+	// Rev is set at build time and holds the revision that the package
+	// was created at.
+	Rev = "dev"
+
 	debug *log.Logger
 
 	// Flag for toggling verbose output.
@@ -38,8 +42,15 @@ func setupDebugLogger(debugHandle io.Writer) {
 func main() {
 	setupDebugLogger(os.Stdout)
 
+	version := flag.Bool("version", false, "Display the version")
 	flag.BoolVar(&debugFlag, "debug", false, "Output additional logging for debugging")
+
 	flag.Parse()
+
+	if *version {
+		fmt.Printf("csp-collector (%s)\n", Rev)
+		os.Exit(0)
+	}
 
 	if debugFlag {
 		debug.Println("Starting up...")
