@@ -2,19 +2,20 @@ language: go
 sudo: false
 matrix:
   include:
-    - go: 1.7.x
-    - go: 1.8.x
-    - go: 1.9.x
-    - go: 1.10.x
-    - go: 1.11.x
-    - go: 1.x
-      env: LATEST=true
-    - go: tip
+  - go: 1.7.x
+  - go: 1.8.x
+  - go: 1.9.x
+  - go: 1.10.x
+  - go: 1.11.x
+  - go: 1.x
+    env: LATEST=true
+  - go: tip
   allow_failures:
-    - go: tip
+  - go: tip
 
 before_install:
   - go get -u golang.org/x/lint/golint
+  - go get github.com/mitchellh/gox
 
 script:
   - go get -t -v ./...
@@ -22,3 +23,18 @@ script:
   - golint -set_exit_status .
   - go vet $(go list ./... | grep -v /vendor/)
   - go test -v -race ./...
+  - if [ "${LATEST}" = "true" ]; then gox -os="linux darwin windows" -arch="amd64" -output="csp-collector.{{.OS}}.{{.Arch}}" -verbose ./...; fi
+
+deploy:
+  provider: releases
+  skip_cleanup: true
+  api_key:
+    secure: KzEwiNI1LI/BQ+iUe0p4yIVsPLlDOMtBRuKNaKTyx2IoKC7wZ+1gBI/bKUAwZM4Lgy8Jo+Ew+yw8vumblLZOMyhqvXkZ/ZEOwMK/cW1HoMHUiAglUPEUeBMGymWU6ddW2gHewV7FflaJ5t4bqt170dQCoQ6DUVcT74j9qnrv8p7TniIaERNRJmrJbEKu98oiPgpjfM/8NjC+1Cc1do3t4V/Kg8K+I1WgTCzqpma8dHVRAcMiz0khPGl0EoXnoTtIP03nNq08akTtPgsB7CQVkOZ7AzFay8CziqrCUDn0fqKXYFs7XEKU1pIAjdDfSlrciaIiVU3E2VAbcU60GtYEyH0YBz+MkW1Cu5kD0Zly9r5YmQPPPnWg/1oVTNcsLuQQ7R1GoFXGbfk/sLjSk8PCl/M+3D8tqJL9vpd18nolNpesnETpgHYt4AyjV5rShzL5T6wkbbG/x5BOHYo99BzrnAuQNm/97ru1YIXp+W1CToZM0VaugwJ5VTDFdQ8apS8QMVj+oMmdoKEIQD1xbARDLdH+RSIc3GcblZLk5nGV92BJyVGVkSFSvNy/mMxEVO4+ZFKatYg54Ue1ItHdwrvGS3cE0PKF63tqewNQi8g2/8FtZjyq6Ib/ECtTLAB7Xokx/9lbsM5XYJNi++Qbsr/N9l/z03tEZI9td//oru/NIOY=
+  file:
+    - csp-collector.windows.amd64.exe
+    - csp-collector.darwin.amd64
+    - csp-collector.linux.amd64
+  on:
+    repo: jacobbednarz/go-csp-collector
+    tags: true
+    condition: $LATEST = true
