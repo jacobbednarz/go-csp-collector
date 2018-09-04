@@ -1,11 +1,24 @@
 language: go
 sudo: false
-go:
-  - 1.7.x
-  - 1.8.x
-  - master
-install:
-  - go get -d -v ./...
+matrix:
+  include:
+    - go: 1.7.x
+    - go: 1.8.x
+    - go: 1.9.x
+    - go: 1.10.x
+    - go: 1.11.x
+    - go: 1.x
+      env: LATEST=true
+    - go: tip
+  allow_failures:
+    - go: tip
+
+before_install:
+  - go get -u golang.org/x/lint/golint
+
 script:
-  - go build -v csp_collector.go
-  - go test -v
+  - go get -t -v ./...
+  - gofmt -d .
+  - golint -set_exit_status .
+  - go vet $(go list ./... | grep -v /vendor/)
+  - go test -v -race ./...
