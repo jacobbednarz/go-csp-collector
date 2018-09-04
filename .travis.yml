@@ -13,8 +13,12 @@ matrix:
   allow_failures:
     - go: tip
 
-install:
-  - go get -d -v ./...
+before_install:
+  - go get -u golang.org/x/lint/golint
+
 script:
-  - go build -v csp_collector.go
-  - go test -v
+  - go get -t -v ./...
+  - gofmt -d .
+  - golint -set_exit_status .
+  - go vet $(go list ./... | grep -v /vendor/)
+  - go test -v -race ./...
