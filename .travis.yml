@@ -2,16 +2,16 @@ language: go
 sudo: false
 matrix:
   include:
-  - go: 1.7.x
-  - go: 1.8.x
-  - go: 1.9.x
-  - go: 1.10.x
-  - go: 1.11.x
-  - go: 1.x
-    env: LATEST=true
-  - go: tip
+    - go: 1.7.x
+    - go: 1.8.x
+    - go: 1.9.x
+    - go: 1.10.x
+    - go: 1.11.x
+    - go: 1.x
+      env: LATEST=true
+    - go: tip
   allow_failures:
-  - go: tip
+    - go: tip
 
 before_install:
   - go get -u golang.org/x/lint/golint
