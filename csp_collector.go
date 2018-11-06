@@ -119,6 +119,9 @@ func validateViolation(r CSPReport) error {
 		"about:blank",
 		"android-webview",
 		"ms-browser-extension",
+		"wvjbscheme://__wvjb_queue_message__",
+		"nativebaiduhd://adblock",
+		"bdvideo://error",
 	}
 
 	for _, value := range ignoredBlockedURIs {

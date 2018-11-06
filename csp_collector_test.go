@@ -113,6 +113,9 @@ func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 		"about:blank",
 		"android-webview",
 		"ms-browser-extension",
+		"wvjbscheme://__wvjb_queue_message__",
+		"nativebaiduhd://adblock",
+		"bdvideo://error",
 	}
 
 	for _, blockedURI := range invalidBlockedURIs {
