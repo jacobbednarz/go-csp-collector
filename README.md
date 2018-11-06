@@ -23,6 +23,27 @@ $ go build csp_collector.go
 $ ./csp_collector
 ```
 
+#### Building for Docker
+
+You will either need to build within a docker container for the purpose, or use  `CGO_ENABLED=0` flag
+to make the build compatible with alpine linux in a docker container.
+
+```sh
+$ CGO_ENABLED=0 go build csp_collector.go
+```
+
+### Command Line Options
+
+| Flag  | Description |
+|-------|:------------|
+|version|Shows the version string before exiting|
+|debug  |Runs in debug mode producing more verbose output|
+|port	|Port to run on, default 8080|
+|filter-file|Reads the blocked URI filter list from the specified file. Note one filter per line|
+
+
+See the sample.filterlist.txt file as an example of the filter list in a file
+
 ### Output formats
 
 The output format can be controlled by passing `--output-format <type>`
