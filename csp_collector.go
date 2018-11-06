@@ -21,6 +21,9 @@ type CSPReport struct {
 		ViolatedDirective  string `json:"violated-directive"`
 		EffectiveDirective string `json:"effective-directive"`
 		OriginalPolicy     string `json:"original-policy"`
+		Disposition        string `json:"disposition"`
+		ScriptSample       string `json:"script-sample"`
+		StatusCode         string `json:"status-code"`
 	} `json:"csp-report"`
 }
 
@@ -132,12 +135,15 @@ func formatReport(r CSPReport) string {
 	s := []string{}
 
 	s = append(s, fmt.Sprintf(`timestamp="%s"`, time.Now().UTC().Format("2006-01-02T15:04:05Z07:00")))
-	s = append(s, fmt.Sprintf(`document-uri="%s"`, r.Body.DocumentURI))
+	s = append(s, fmt.Sprintf(`document_uri="%s"`, r.Body.DocumentURI))
 	s = append(s, fmt.Sprintf(`referrer="%s"`, r.Body.Referrer))
-	s = append(s, fmt.Sprintf(`blocked-uri="%s"`, r.Body.BlockedURI))
-	s = append(s, fmt.Sprintf(`violated-directive="%s"`, r.Body.ViolatedDirective))
-	s = append(s, fmt.Sprintf(`effective-directive="%s"`, r.Body.EffectiveDirective))
-	s = append(s, fmt.Sprintf(`original-policy="%s"`, r.Body.OriginalPolicy))
+	s = append(s, fmt.Sprintf(`blocked_uri="%s"`, r.Body.BlockedURI))
+	s = append(s, fmt.Sprintf(`violated_directive="%s"`, r.Body.ViolatedDirective))
+	s = append(s, fmt.Sprintf(`effective_directive="%s"`, r.Body.EffectiveDirective))
+	s = append(s, fmt.Sprintf(`original_policy="%s"`, r.Body.OriginalPolicy))
+	s = append(s, fmt.Sprintf(`disposition="%s"`, r.Body.Disposition))
+	s = append(s, fmt.Sprintf(`script_sample="%s"`, r.Body.ScriptSample))
+	s = append(s, fmt.Sprintf(`status_code="%s"`, r.Body.StatusCode))
 
 	return strings.Join(s, " ")
 }
