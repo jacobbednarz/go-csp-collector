@@ -23,6 +23,18 @@ $ go build csp_collector.go
 $ ./csp_collector
 ```
 
+### Output formats
+
+The output format can be controlled by passing `--output-format <type>`
+to the executable. Available formats are:
+
+- **Text**: A key/value output that quotes all the values. Example:
+    `blocked_uri="about:blank" ...`
+- **JSON**: Single line, compressed JSON object. Example:
+    `{"blocked_uri":"about:blank"}`
+
+The default formatter is text.
+
 ### Writing to a file instead of just STDOUT
 
 If you'd rather have these violations end up in a file, I suggest just
