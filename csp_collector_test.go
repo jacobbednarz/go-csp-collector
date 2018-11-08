@@ -51,47 +51,6 @@ func TestHandlerForAllowingHealthcheck(t *testing.T) {
 	}
 }
 
-func TestFormattedOutputIncludesTimestamp(t *testing.T) {
-	var rawReport = []byte(`{
-		"csp-report": {
-			"document-uri": "http://example.com/signup.html"
-		}
-	}`)
-
-	var report CSPReport
-	err := json.Unmarshal(rawReport, &report)
-	if err != nil {
-		fmt.Println("error:", err)
-	}
-
-	formattedReportOutput := formatReport(report)
-
-	if !strings.Contains(formattedReportOutput, "timestamp=") {
-		t.Errorf("timestamp key is expected but not found")
-	}
-}
-
-func TestFormattedOutputIncludesEmptyKeysForRequiredValues(t *testing.T) {
-	var rawReport = []byte(`{
-		"csp-report": {
-			"document-uri": "http://example.com/signup.html",
-			"referrer": ""
-		}
-	}`)
-
-	var report CSPReport
-	err := json.Unmarshal(rawReport, &report)
-	if err != nil {
-		fmt.Println("error:", err)
-	}
-
-	formattedReportOutput := formatReport(report)
-
-	if !strings.Contains(formattedReportOutput, "referrer=\"\"") {
-		t.Errorf("expected to find empty 'referrer' value but did not")
-	}
-}
-
 func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 	invalidBlockedURIs := []string{
 		"resource://",

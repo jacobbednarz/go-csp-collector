@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"os"
 	"strings"
-	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // CSPReport is the structure of the HTTP payload the system receives.
@@ -32,21 +31,30 @@ var (
 	// was created at.
 	Rev = "dev"
 
-	debug *log.Logger
-
 	// Flag for toggling verbose output.
 	debugFlag bool
+
+	// Flag for toggling output format.
+	outputFormat string
+
+	// Shared defaults for the logger output. This ensures that we are
+	// using the same keys for the `FieldKey` values across both formatters.
+	logFieldMapDefaults = log.FieldMap{
+		log.FieldKeyTime:  "timestamp",
+		log.FieldKeyLevel: "level",
+		log.FieldKeyMsg:   "message",
+	}
 )
 
-func setupDebugLogger(debugHandle io.Writer) {
-	debug = log.New(debugHandle, "[DEBUG] ", log.Lmicroseconds)
+func init() {
+	log.SetOutput(os.Stdout)
+	log.SetLevel(log.InfoLevel)
 }
 
 func main() {
-	setupDebugLogger(os.Stdout)
-
 	version := flag.Bool("version", false, "Display the version")
 	flag.BoolVar(&debugFlag, "debug", false, "Output additional logging for debugging")
+	flag.StringVar(&outputFormat, "output-format", "text", "Define how the violation reports are formatted for output.\nDefaults to 'text'. Valid options are 'text' or 'json'")
 
 	flag.Parse()
 
@@ -56,8 +64,24 @@ func main() {
 	}
 
 	if debugFlag {
-		debug.Println("Starting up...")
+		log.SetLevel(log.DebugLevel)
 	}
+
+	if outputFormat == "json" {
+		log.SetFormatter(&log.JSONFormatter{
+			FieldMap: logFieldMapDefaults,
+		})
+	} else {
+		log.SetFormatter(&log.TextFormatter{
+			FullTimestamp:          true,
+			DisableLevelTruncation: true,
+			QuoteEmptyFields:       true,
+			DisableColors:          true,
+			FieldMap:               logFieldMapDefaults,
+		})
+	}
+
+	log.Debug("Starting up...")
 
 	http.HandleFunc("/", handleViolationReport)
 	log.Fatal(http.ListenAndServe(":8080", nil))
@@ -71,6 +95,9 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		log.WithFields(log.Fields{
+			"http_method": r.Method,
+		}).Debug("Received invalid HTTP method")
 		return
 	}
 
@@ -80,6 +107,7 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 	err := decoder.Decode(&report)
 	if err != nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
+		log.Debug(fmt.Sprintf("Unable to decode invalid JSON payload: %s", err))
 		return
 	}
 	defer r.Body.Close()
@@ -87,15 +115,21 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 	reportValidation := validateViolation(report)
 	if reportValidation != nil {
 		http.Error(w, reportValidation.Error(), http.StatusBadRequest)
+		log.Debug(fmt.Sprintf("Received invalid payload: %s", reportValidation.Error()))
 		return
 	}
 
-	reportData := formatReport(report)
-
-	// Set flag to 0 here so that we control the logger output here and it doesn't
-	// prefix everything with an additional timestamp.
-	log.SetFlags(0)
-	log.Println(reportData)
+	log.WithFields(log.Fields{
+		"document_uri":        report.Body.DocumentURI,
+		"referrer":            report.Body.Referrer,
+		"blocked_uri":         report.Body.BlockedURI,
+		"violated_directive":  report.Body.ViolatedDirective,
+		"effective_directive": report.Body.EffectiveDirective,
+		"original_policy":     report.Body.OriginalPolicy,
+		"disposition":         report.Body.Disposition,
+		"script_sample":       report.Body.ScriptSample,
+		"status_code":         report.Body.StatusCode,
+	}).Info()
 }
 
 func validateViolation(r CSPReport) error {
@@ -132,21 +166,4 @@ func validateViolation(r CSPReport) error {
 	}
 
 	return nil
-}
-
-func formatReport(r CSPReport) string {
-	s := []string{}
-
-	s = append(s, fmt.Sprintf(`timestamp="%s"`, time.Now().UTC().Format("2006-01-02T15:04:05Z07:00")))
-	s = append(s, fmt.Sprintf(`document_uri="%s"`, r.Body.DocumentURI))
-	s = append(s, fmt.Sprintf(`referrer="%s"`, r.Body.Referrer))
-	s = append(s, fmt.Sprintf(`blocked_uri="%s"`, r.Body.BlockedURI))
-	s = append(s, fmt.Sprintf(`violated_directive="%s"`, r.Body.ViolatedDirective))
-	s = append(s, fmt.Sprintf(`effective_directive="%s"`, r.Body.EffectiveDirective))
-	s = append(s, fmt.Sprintf(`original_policy="%s"`, r.Body.OriginalPolicy))
-	s = append(s, fmt.Sprintf(`disposition="%s"`, r.Body.Disposition))
-	s = append(s, fmt.Sprintf(`script_sample="%s"`, r.Body.ScriptSample))
-	s = append(s, fmt.Sprintf(`status_code="%s"`, r.Body.StatusCode))
-
-	return strings.Join(s, " ")
 }
