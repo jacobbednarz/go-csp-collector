@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func TestHandlerForDisallowedMethods(t *testing.T) {
@@ -122,5 +126,42 @@ func TestValidateViolationWithValidBlockedURIs(t *testing.T) {
 	validateErr := validateViolation(report)
 	if validateErr != nil {
 		t.Errorf("expected error not be raised")
+	}
+}
+
+func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
+	// Discard the output we create from the calls here.
+	log.SetOutput(ioutil.Discard)
+
+	statusCodeValues := []interface{}{"200", 200}
+
+	for _, statusCode := range statusCodeValues {
+		t.Run(fmt.Sprintf("%T", statusCode), func(t *testing.T) {
+			csp := CSPReport{
+				CSPReportBody{
+					StatusCode: statusCode,
+				},
+			}
+
+			payload, err := json.Marshal(csp)
+			if err != nil {
+				t.Fatalf("failed to marshal JSON: %v", err)
+			}
+
+			request, err := http.NewRequest("POST", "/", bytes.NewBuffer(payload))
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+
+			recorder := httptest.NewRecorder()
+			handleViolationReport(recorder, request)
+
+			response := recorder.Result()
+			defer response.Body.Close()
+
+			if response.StatusCode != http.StatusOK {
+				t.Errorf("expected HTTP status %v; got %v", http.StatusOK, response.StatusCode)
+			}
+		})
 	}
 }
