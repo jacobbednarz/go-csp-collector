@@ -1,0 +1,78 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ template "csp-collector.fullname" . }}
+  labels:
+    app: {{ template "csp-collector.name" . }}
+    chart: {{ template "csp-collector.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    checksum/config: {{ include (print $.Template.BasePath "/configMap.yaml") . | sha256sum | trunc 63 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "csp-collector.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configMap.yaml") . | sha256sum | trunc 63 }}
+      labels:
+        app: {{ template "csp-collector.name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+          - name: config-volume
+            mountPath: /configs
+          args:
+            - "/csp_collector"
+          {{- if .Values.custom.jsonOutput }}
+            - "--output-format"
+            - "json"
+          {{- end }}
+          {{- if .Values.custom.filterlist }}
+            - "--filter-file"
+            - "/configs/{{- .Values.custom.filterlist -}}"
+          {{- end }}
+          {{- if .Values.custom.graylogHost }}
+            - "--graylog"
+            - "{{- .Values.custom.graylogHost -}}"
+          {{- end }}
+          {{- if .Values.custom.debug }}
+            - "--debug"
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /_healthcheck
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /_healthcheck
+              port: http
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      volumes:
+      - name: config-volume
+        configMap:
+          name: {{ template "csp-collector.fullname" . }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
