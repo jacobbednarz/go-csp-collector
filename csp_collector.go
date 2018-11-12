@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -48,6 +50,38 @@ var (
 		log.FieldKeyLevel: "level",
 		log.FieldKeyMsg:   "message",
 	}
+
+	// Path to file which has blocked URI's per line
+	blockedURIfile string
+
+	// Default URI Filter list
+	ignoredBlockedURIs = []string{
+		"resource://",
+		"chromenull://",
+		"chrome-extension://",
+		"safari-extension://",
+		"mxjscall://",
+		"webviewprogressproxy://",
+		"res://",
+		"mx://",
+		"safari-resource://",
+		"chromeinvoke://",
+		"chromeinvokeimmediate://",
+		"mbinit://",
+		"opera://",
+		"localhost",
+		"127.0.0.1",
+		"none://",
+		"about:blank",
+		"android-webview",
+		"ms-browser-extension",
+		"wvjbscheme://__wvjb_queue_message__",
+		"nativebaiduhd://adblock",
+		"bdvideo://error",
+	}
+
+	// TCP Port to listen on
+	listenPort int
 )
 
 func init() {
@@ -55,16 +89,36 @@ func init() {
 	log.SetLevel(log.InfoLevel)
 }
 
+func trimEmpty(s []string) []string {
+	var r []string
+	for _, str := range s {
+		if str != "" {
+			r = append(r, str)
+		}
+	}
+	return r
+}
+
 func main() {
 	version := flag.Bool("version", false, "Display the version")
 	flag.BoolVar(&debugFlag, "debug", false, "Output additional logging for debugging")
 	flag.StringVar(&outputFormat, "output-format", "text", "Define how the violation reports are formatted for output.\nDefaults to 'text'. Valid options are 'text' or 'json'")
+	flag.StringVar(&blockedURIfile, "filter-file", "", "Blocked URI Filter file")
+	flag.IntVar(&listenPort, "port", 8080, "Port to listen on")
 
 	flag.Parse()
 
 	if *version {
 		fmt.Printf("csp-collector (%s)\n", Rev)
 		os.Exit(0)
+	}
+
+	if blockedURIfile != "" {
+		content, err := ioutil.ReadFile(blockedURIfile)
+		if err != nil {
+			fmt.Printf("Error reading Blocked File list: %s", blockedURIfile)
+		}
+		ignoredBlockedURIs = trimEmpty(strings.Split(string(content), "\n"))
 	}
 
 	if debugFlag {
@@ -86,9 +140,16 @@ func main() {
 	}
 
 	log.Debug("Starting up...")
+	if blockedURIfile != "" {
+		log.Debugf("Using Filter list from file at: %s\n", blockedURIfile)
+	} else {
+		log.Debug("Using Filter list from internal list")
+	}
+	log.Debugf("Blocked URI List: %s", ignoredBlockedURIs)
+	log.Debugf("Listening on TCP Port: %s", strconv.Itoa(listenPort))
 
 	http.HandleFunc("/", handleViolationReport)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(listenPort)), nil))
 }
 
 func handleViolationReport(w http.ResponseWriter, r *http.Request) {
@@ -137,31 +198,6 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 }
 
 func validateViolation(r CSPReport) error {
-	ignoredBlockedURIs := []string{
-		"resource://",
-		"chromenull://",
-		"chrome-extension://",
-		"safari-extension://",
-		"mxjscall://",
-		"webviewprogressproxy://",
-		"res://",
-		"mx://",
-		"safari-resource://",
-		"chromeinvoke://",
-		"chromeinvokeimmediate://",
-		"mbinit://",
-		"opera://",
-		"localhost",
-		"127.0.0.1",
-		"none://",
-		"about:blank",
-		"android-webview",
-		"ms-browser-extension",
-		"wvjbscheme://__wvjb_queue_message__",
-		"nativebaiduhd://adblock",
-		"bdvideo://error",
-	}
-
 	for _, value := range ignoredBlockedURIs {
 		if strings.HasPrefix(r.Body.BlockedURI, value) == true {
 			err := fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
