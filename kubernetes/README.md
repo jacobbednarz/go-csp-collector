@@ -1,13 +1,13 @@
-# Kubernetes / Helm Deployment Template for the CSP Report Collector
+# Kubernetes / Helm Deployment Template for the CSP violation collector
 
 ## TL;DR;
 
 ```console
-$ helm install -n csp-reporter -f custom-values.yaml kubernetes
+$ helm install -n csp-collector -f custom-values.yaml kubernetes
 ```
 
 ## Introduction
-This chart deploys a Content Security Policy report collector from
+This chart deploys a Content Security Policy violation collector from
 https://github.com/jacobbednarz/go-csp-collector/
 
 Using the [kubernetes/values.yaml][1] file create a custom-values.yaml override

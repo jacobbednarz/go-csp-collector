@@ -1,5 +1,5 @@
 {{- if .Values.ingress.enabled }}
-1. The CSP reporter availble by setting your report-uri to :
+1. The CSP violation collector is available by setting your report-uri to:
 {{- range .Values.ingress.hosts }}
   http{{ if $.Values.ingress.tls }}s{{ end }}://{{ . }}{{ $.Values.ingress.path }}
 {{- end }}
