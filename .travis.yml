@@ -2,7 +2,6 @@ language: go
 sudo: false
 matrix:
   include:
-    - go: 1.11.x
     - go: 1.x
       env: LATEST=true
     - go: tip
@@ -13,7 +12,6 @@ env:
   - GO111MODULE=on
 
 before_install:
-  - go get -u golang.org/x/lint/golint
   - go get github.com/mitchellh/gox
 
 script:
