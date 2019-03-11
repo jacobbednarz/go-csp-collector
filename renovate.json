@@ -1,0 +1,10 @@
+{
+  "extends": ["config:base"],
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 1,
+  "gomodTidy": true,
+  "ignoreDeps": [
+    "golang.org/x/crypto", 
+    "golang.org/x/sys"
+  ]
+}
