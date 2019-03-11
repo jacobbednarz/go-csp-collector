@@ -10,9 +10,6 @@ matrix:
   allow_failures:
     - go: tip
 
-before_install:
-  - go get github.com/mitchellh/gox
-
 script:
   - go get -t -v ./...
   - gofmt -d .
@@ -20,6 +17,10 @@ script:
   - go vet $(go list ./... | grep -v /vendor/)
   - go test -v -race ./...
   - if [ "${LATEST}" = "true" ]; then gox -os="linux darwin windows" -arch="amd64" -output="csp-collector.{{.OS}}.{{.Arch}}" -ldflags "-X main.Rev=`git rev-parse --short HEAD`" -verbose ./...; fi
+
+before_install:
+  - go get -u github.com/mitchellh/gox
+  - go get -u golang.org/x/lint/golint
 
 deploy:
   provider: releases
