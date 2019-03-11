@@ -2,19 +2,13 @@ language: go
 sudo: false
 matrix:
   include:
-    - go: 1.11.x
     - go: 1.x
-      env: LATEST=true
+      env:
+      - LATEST=true
+      - GO111MODULE=on
     - go: tip
   allow_failures:
     - go: tip
-
-env:
-  - GO111MODULE=on
-
-before_install:
-  - go get -u golang.org/x/lint/golint
-  - go get github.com/mitchellh/gox
 
 script:
   - go get -t -v ./...
@@ -23,6 +17,10 @@ script:
   - go vet $(go list ./... | grep -v /vendor/)
   - go test -v -race ./...
   - if [ "${LATEST}" = "true" ]; then gox -os="linux darwin windows" -arch="amd64" -output="csp-collector.{{.OS}}.{{.Arch}}" -ldflags "-X main.Rev=`git rev-parse --short HEAD`" -verbose ./...; fi
+
+before_install:
+  - go get -u github.com/mitchellh/gox
+  - go get -u golang.org/x/lint/golint
 
 deploy:
   provider: releases
