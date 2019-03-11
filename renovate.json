@@ -1,5 +1,6 @@
 {
-  "extends": [
-    "config:base"
-  ]
+  "extends": ["config:base"],
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 1,
+  "gomodTidy": true
 }
