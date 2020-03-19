@@ -2,10 +2,10 @@ language: go
 sudo: false
 matrix:
   include:
-    - go: 1.x
+    - go: "1.13"
       env:
-      - LATEST=true
-      - GO111MODULE=on
+        - LATEST=true
+        - GO111MODULE=on
     - go: tip
   allow_failures:
     - go: tip
