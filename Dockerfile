@@ -10,4 +10,14 @@ FROM alpine:3.11
 LABEL maintainer="https://github.com/jacobbednarz/go-csp-collector"
 COPY --from=build /go/src/jacobbednarz/go-csp-collector/csp_collector /
 EXPOSE 8080
+
+RUN mkdir -p /home/csp_collector && \
+    addgroup -Sg 1000 csp_collector &&  \
+    adduser  -SG csp_collector -u 1000 -h /home/csp_collector csp_collector && \
+    chown csp_collector:csp_collector /home/csp_collector
+
+USER csp_collector
+
+RUN id csp_collector
+
 CMD ["/csp_collector"]
