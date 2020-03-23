@@ -1,3 +1,5 @@
 module github.com/jacobbednarz/go-csp-collector
 
-require github.com/sirupsen/logrus v1.4.2
+go 1.14
+
+require github.com/sirupsen/logrus v1.5.0
