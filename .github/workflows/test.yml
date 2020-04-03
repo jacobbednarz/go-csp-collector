@@ -23,7 +23,7 @@ jobs:
         run: |
           go get -v -u golang.org/x/lint/golint
           $(go env GOPATH)/bin/golint -set_exit_status .
-      # - name: Vet
-      #   run: go vet $(go list ./... | grep -v /vendor/)
+      - name: Vet
+        run: go vet $(go list ./... | grep -v /vendor/)
       - name: Test
         run: go test -v -race ./...
