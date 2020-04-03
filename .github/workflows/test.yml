@@ -1,5 +1,7 @@
 on: [push, pull_request]
 name: Test
+env:
+  GOPROXY: "https://proxy.golang.org"
 jobs:
   test:
     strategy:
