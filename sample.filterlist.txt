@@ -1,3 +1,4 @@
+# hash indicates a comment
 resource://
 chromenull://
 chrome-extension://

@@ -165,3 +165,28 @@ func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
 		})
 	}
 }
+
+func TestFilterListProcessing(t *testing.T) {
+	// Discard the output we create from the calls here.
+	log.SetOutput(ioutil.Discard)
+
+	blockList := []string{
+		"resource://",
+		"",
+		"# comment",
+		"chrome-extension://",
+		"",
+	}
+
+	trimmed := trimEmptyAndComments(blockList)
+
+	if len(trimmed) != 2 {
+		t.Errorf("expected filter list length 2; got %v", len(trimmed))
+	}
+	if trimmed[0] != "resource://" {
+		t.Errorf("unexpected list entry; got %v", trimmed[0])
+	}
+	if trimmed[1] != "chrome-extension://" {
+		t.Errorf("unexpected list entry; got %v", trimmed[1])
+	}
+}
