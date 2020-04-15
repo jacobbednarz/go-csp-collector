@@ -89,12 +89,19 @@ func init() {
 	log.SetLevel(log.InfoLevel)
 }
 
-func trimEmpty(s []string) []string {
+func trimEmptyAndComments(s []string) []string {
 	var r []string
 	for _, str := range s {
-		if str != "" {
-			r = append(r, str)
+		if str == "" {
+			continue
 		}
+
+		// ignore comments
+		if strings.HasPrefix(str, "#") {
+			continue
+		}
+
+		r = append(r, str)
 	}
 	return r
 }
@@ -118,7 +125,7 @@ func main() {
 		if err != nil {
 			fmt.Printf("Error reading Blocked File list: %s", blockedURIfile)
 		}
-		ignoredBlockedURIs = trimEmpty(strings.Split(string(content), "\n"))
+		ignoredBlockedURIs = trimEmptyAndComments(strings.Split(string(content), "\n"))
 	}
 
 	if debugFlag {
