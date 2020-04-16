@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+
+version=$1
+
+if [[ -z "$version" ]]; then
+  echo "usage: $0 <version-number>"
+  exit 1
+fi
+
+if [ -d build ]; then
+  rm -rf build
+fi
+mkdir -p build
+
+platforms=("windows/amd64" "linux/amd64" "darwin/amd64")
+
+echo "==> Build started for v${version}"
+
+for platform in "${platforms[@]}"
+do
+  platform_split=(${platform//\// })
+  GOOS=${platform_split[0]}
+  GOARCH=${platform_split[1]}
+  output_name="go-csp-collector_${version}_${GOOS}_${GOARCH}"
+
+  printf "==> Building %s\t%s\n" "$platform" "build/$output_name" | expand -t 30
+
+
+  if [ $GOOS = "windows" ]; then
+    env GOOS=$GOOS GOARCH=$GOARCH go build -o "build/${output_name}.exe" .
+  else
+    env GOOS=$GOOS GOARCH=$GOARCH go build -o "build/${output_name}" .
+  fi
+  if [ $? -ne 0 ]; then
+    echo "Building the binary has failed!"
+    exit 1
+  fi
+
+  printf "==> Tarballing %s\t%s\n" "$platform" "build/${output_name}.tar.gz" | expand -t 30
+  if [ $GOOS = "windows" ]; then
+    tar -czf "build/${output_name}.tar.gz" "build/${output_name}.exe"
+  else
+    tar -czf "build/${output_name}.tar.gz" "build/${output_name}"
+  fi
+
+  if [ $? -ne 0 ]; then
+    echo "Creating the tarball has failed!"
+    exit 1
+  fi
+done
+
+echo "==> Generating file checksums to build/checksums.txt"
+shasum -a 256 build/* > "build/checksums.txt"
+
+echo "==> Build process complete"
