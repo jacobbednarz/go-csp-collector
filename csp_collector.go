@@ -191,6 +191,12 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	metadatas, got_metadata := r.URL.Query()["metadata"]
+	var metadata string
+	if got_metadata {
+		metadata = metadatas[0]
+	}
+
 	log.WithFields(log.Fields{
 		"document_uri":        report.Body.DocumentURI,
 		"referrer":            report.Body.Referrer,
@@ -201,6 +207,7 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 		"disposition":         report.Body.Disposition,
 		"script_sample":       report.Body.ScriptSample,
 		"status_code":         report.Body.StatusCode,
+		"metadata":            metadata,
 	}).Info()
 }
 
