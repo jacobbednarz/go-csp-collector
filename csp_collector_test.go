@@ -56,9 +56,6 @@ func TestHandlerForAllowingHealthcheck(t *testing.T) {
 }
 
 func TestHandlerWithMetadata(t *testing.T) {
-	var logBuffer bytes.Buffer
-	log.SetOutput(&logBuffer)
-
 	csp := CSPReport{
 		CSPReportBody{
 			DocumentURI: "http://example.com",
@@ -66,25 +63,39 @@ func TestHandlerWithMetadata(t *testing.T) {
 		},
 	}
 
-	payload, err := json.Marshal(csp)
+	payload, _ := json.Marshal(csp)
 
-	request, err := http.NewRequest("POST", "/?metadata=value", bytes.NewBuffer(payload))
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-	recorder := httptest.NewRecorder()
+	for _, repeats := range []int{1, 2} {
+		var logBuffer bytes.Buffer
+		log.SetOutput(&logBuffer)
 
-	handleViolationReport(recorder, request)
+		url := "/?"
+		for i := 0; i < repeats; i += 1 {
+			url += fmt.Sprintf("metadata=value%d&", i)
+		}
 
-	response := recorder.Result()
-	defer response.Body.Close()
+		request, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+		if err != nil {
+			t.Fatalf("failed to create request: %v", err)
+		}
+		recorder := httptest.NewRecorder()
 
-	if response.StatusCode != http.StatusOK {
-		t.Errorf("expected HTTP status %v; got %v", http.StatusOK, response.StatusCode)
-	}
+		handleViolationReport(recorder, request)
 
-	if !strings.Contains(logBuffer.String(), "metadata=value") {
-		t.Fatalf("Logged result doesn't contain metadata")
+		response := recorder.Result()
+		defer response.Body.Close()
+
+		if response.StatusCode != http.StatusOK {
+			t.Errorf("expected HTTP status %v; got %v", http.StatusOK, response.StatusCode)
+		}
+
+		log := logBuffer.String()
+		if !strings.Contains(log, "metadata=value0") {
+			t.Fatalf("Logged result should contain metadata value0 in '%s'", log)
+		}
+		if strings.Contains(log, "metadata=value1") {
+			t.Fatalf("Logged result shouldn't contain metadata value1 in '%s'", log)
+		}
 	}
 }
 
