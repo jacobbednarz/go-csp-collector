@@ -191,9 +191,9 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metadatas, got_metadata := r.URL.Query()["metadata"]
+	metadatas, gotMetadata := r.URL.Query()["metadata"]
 	var metadata string
-	if got_metadata {
+	if gotMetadata {
 		metadata = metadatas[0]
 	}
 

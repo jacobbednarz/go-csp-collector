@@ -70,7 +70,7 @@ func TestHandlerWithMetadata(t *testing.T) {
 		log.SetOutput(&logBuffer)
 
 		url := "/?"
-		for i := 0; i < repeats; i += 1 {
+		for i := 0; i < repeats; i++ {
 			url += fmt.Sprintf("metadata=value%d&", i)
 		}
 
