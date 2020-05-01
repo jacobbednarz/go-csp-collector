@@ -212,5 +212,9 @@ func validateViolation(r CSPReport) error {
 		}
 	}
 
+	if !strings.HasPrefix(r.Body.DocumentURI, "http") {
+		return fmt.Errorf("document URI ('%s') is invalid", r.Body.DocumentURI)
+	}
+
 	return nil
 }

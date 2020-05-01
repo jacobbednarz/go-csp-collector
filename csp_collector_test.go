@@ -88,6 +88,7 @@ func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 		t.Run(testName, func(t *testing.T) {
 			var rawReport = []byte(fmt.Sprintf(`{
 				"csp-report": {
+					"document-uri": "https://example.com",
 					"blocked-uri": "%s"
 				}
 			}`, blockedURI))
@@ -113,6 +114,7 @@ func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 func TestValidateViolationWithValidBlockedURIs(t *testing.T) {
 	var rawReport = []byte(`{
 		"csp-report": {
+			"document-uri": "https://example.com",
 			"blocked-uri": "https://google.com/example.css"
 		}
 	}`)
@@ -129,6 +131,19 @@ func TestValidateViolationWithValidBlockedURIs(t *testing.T) {
 	}
 }
 
+func TestValidateNonHttpDocumentURI(t *testing.T) {
+	log.SetOutput(ioutil.Discard)
+
+	report := CSPReport{Body: CSPReportBody{
+		BlockedURI:  "http://example.com/",
+		DocumentURI: "about",
+	}}
+	validateErr := validateViolation(report)
+	if validateErr.Error() != fmt.Sprintf("document URI ('about') is invalid") {
+		t.Errorf("expected error to include correct message string but it didn't")
+	}
+}
+
 func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
 	// Discard the output we create from the calls here.
 	log.SetOutput(ioutil.Discard)
@@ -139,7 +154,8 @@ func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
 		t.Run(fmt.Sprintf("%T", statusCode), func(t *testing.T) {
 			csp := CSPReport{
 				CSPReportBody{
-					StatusCode: statusCode,
+					DocumentURI: "https://example.com",
+					StatusCode:  statusCode,
 				},
 			}
 
