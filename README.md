@@ -44,6 +44,15 @@ $ CGO_ENABLED=0 go build csp_collector.go
 
 See the sample.filterlist.txt file as an example of the filter list in a file
 
+### Request metadata
+
+Additional information can be attached to each report by adding a `metadata`
+url parameter to each report. That value will be copied verbatim into the
+logged report.
+
+For example a report sent to `https://collector.example.com/?metadata=foobar`
+will include field `metadata` with value `foobar`.
+
 ### Output formats
 
 The output format can be controlled by passing `--output-format <type>`

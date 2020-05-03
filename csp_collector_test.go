@@ -55,6 +55,50 @@ func TestHandlerForAllowingHealthcheck(t *testing.T) {
 	}
 }
 
+func TestHandlerWithMetadata(t *testing.T) {
+	csp := CSPReport{
+		CSPReportBody{
+			DocumentURI: "http://example.com",
+			BlockedURI:  "http://example.com",
+		},
+	}
+
+	payload, _ := json.Marshal(csp)
+
+	for _, repeats := range []int{1, 2} {
+		var logBuffer bytes.Buffer
+		log.SetOutput(&logBuffer)
+
+		url := "/?"
+		for i := 0; i < repeats; i++ {
+			url += fmt.Sprintf("metadata=value%d&", i)
+		}
+
+		request, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+		if err != nil {
+			t.Fatalf("failed to create request: %v", err)
+		}
+		recorder := httptest.NewRecorder()
+
+		handleViolationReport(recorder, request)
+
+		response := recorder.Result()
+		defer response.Body.Close()
+
+		if response.StatusCode != http.StatusOK {
+			t.Errorf("expected HTTP status %v; got %v", http.StatusOK, response.StatusCode)
+		}
+
+		log := logBuffer.String()
+		if !strings.Contains(log, "metadata=value0") {
+			t.Fatalf("Logged result should contain metadata value0 in '%s'", log)
+		}
+		if strings.Contains(log, "metadata=value1") {
+			t.Fatalf("Logged result shouldn't contain metadata value1 in '%s'", log)
+		}
+	}
+}
+
 func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 	invalidBlockedURIs := []string{
 		"resource://",
