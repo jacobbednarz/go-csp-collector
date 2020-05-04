@@ -7,6 +7,9 @@ if [[ -z "$version" ]]; then
   exit 1
 fi
 
+git_sha=`git rev-parse --short HEAD`
+version_with_sha="${version}+${git_sha}"
+
 if [ -d build ]; then
   rm -rf build
 fi
@@ -27,9 +30,9 @@ do
 
 
   if [ $GOOS = "windows" ]; then
-    env GOOS=$GOOS GOARCH=$GOARCH go build -o "build/${output_name}.exe" .
+    env GOOS=$GOOS GOARCH=$GOARCH go build -o "build/${output_name}.exe" -ldflags "-X main.Rev=${version_with_sha}" .
   else
-    env GOOS=$GOOS GOARCH=$GOARCH go build -o "build/${output_name}" .
+    env GOOS=$GOOS GOARCH=$GOARCH go build -o "build/${output_name}" -ldflags "-X main.Rev=${version_with_sha}" .
   fi
   if [ $? -ne 0 ]; then
     echo "Building the binary has failed!"
