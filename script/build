@@ -41,9 +41,9 @@ do
 
   printf "==> Tarballing %s\t%s\n" "$platform" "build/${output_name}.tar.gz" | expand -t 30
   if [ $GOOS = "windows" ]; then
-    tar -czf "build/${output_name}.tar.gz" "build/${output_name}.exe"
+    tar -czf "build/${output_name}.tar.gz" -C "build" "${output_name}.exe"
   else
-    tar -czf "build/${output_name}.tar.gz" "build/${output_name}"
+    tar -czf "build/${output_name}.tar.gz" -C "build" "${output_name}"
   fi
 
   if [ $? -ne 0 ]; then
