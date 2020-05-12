@@ -69,6 +69,8 @@ var (
 		"chromeinvokeimmediate://",
 		"mbinit://",
 		"opera://",
+		"ms-appx://",
+		"ms-appx-web://",
 		"localhost",
 		"127.0.0.1",
 		"none://",
