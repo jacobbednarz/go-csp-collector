@@ -5,7 +5,7 @@ containing the violation report. It captures the report and will write
 it to STDOUT via Go's logger.
 
 A neat little feature of this tool is that it automatically ignores
-unactionable reports. Check out the [full list][1] if you're interested.
+unactionable reports. Check out the [default list][1] if you're interested.
 
 ### Installation
 
@@ -81,5 +81,5 @@ violation data because there are already a bunch of great solutions out
 there. Once you have your violations being collected, be sure to slurp
 them into your favourite log aggregation tool.
 
-[1]: https://github.com/jacobbednarz/go-csp-collector/blob/36dacd76a257a9863d4ffb2482b1034558752587/csp_collector.go#L86-L106
+[1]: https://github.com/jacobbednarz/go-csp-collector/blob/master/sample.filterlist.txt
 [2]: https://github.com/jacobbednarz/go-csp-collector/releases
