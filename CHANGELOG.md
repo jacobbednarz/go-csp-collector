@@ -1,5 +1,9 @@
 ## v0.0.10 (Unreleased)
 
+**Improvements**
+
+- Fix README links for kubernetes-helm documentation
+
 ## v0.0.9 - Definitely Maybe
 
 **Features**
