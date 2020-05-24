@@ -1,0 +1,9 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "csp-collector.fullname" . }}
+  labels:
+    {{- include "csp-collector.labels" . | nindent 4 }}
+data:
+{{ (.Files.Glob "configMaps/*").AsConfig | indent 2 }}
