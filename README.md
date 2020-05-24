@@ -89,4 +89,4 @@ Currently supported deployment mechanisms:
 
 [1]: https://github.com/jacobbednarz/go-csp-collector/blob/master/sample.filterlist.txt
 [2]: https://github.com/jacobbednarz/go-csp-collector/releases
-[3]: https://github.com/jacobbednarz/go-csp-collector/blob/master/deployment/kubernetes-helm/README.md
+[3]: https://github.com/jacobbednarz/go-csp-collector/tree/master/deployments/kubernetes-helm/README.md
