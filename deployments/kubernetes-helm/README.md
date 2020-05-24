@@ -12,8 +12,9 @@ This chart deploys a Content Security Policy violation collector from
 https://github.com/jacobbednarz/go-csp-collector/
 
 Using the [kubernetes-helm/values.yaml][1] file create a custom-values.yaml override
-with just the changed values then run the command above.
-eg.
+with just the changed values then run the command above. Example:
+
+```yaml
 replicaCount: 2
 custom:
   filterlist: "custom.filter.list"
@@ -52,4 +53,4 @@ ingress:
 | `custom.filterlist`         | Name of file within the configMaps dir for custom filters| `false` Uses list compiled into the app  |
 | `custom.jsonOutput`         | Log entries as json objects, use `false` for plain text  | `true`                                   |
 
-[1]: https://github.com/jacobbednarz/go-csp-collector/blob/master/deployment/kubernetes-helm/values.yaml
+[1]: https://github.com/jacobbednarz/go-csp-collector/tree/master/deployments/kubernetes-helm/values.yaml
