@@ -8,35 +8,35 @@
 
 **Features**
 
-- Add support for Kubernetes Helm deployments [#17](https://github.com/jacobbednarz/go-csp-collector/issues/17)
+- Add support for Kubernetes Helm deployments ([#17](https://github.com/jacobbednarz/go-csp-collector/issues/17))
 
 **Improvements**
 
-- Filter MS application schemes [#43](https://github.com/jacobbednarz/go-csp-collector/issues/43)
+- Filter MS application schemes ([#43](https://github.com/jacobbednarz/go-csp-collector/issues/43))
 
 ## v0.0.8 
 
 **Improvements**
 
-- Updated format of `-version` output to be `MAJOR.MINOR.PATCH+GIT_SHA` [#42](https://github.com/jacobbednarz/go-csp-collector/issues/42)
+- Updated format of `-version` output to be `MAJOR.MINOR.PATCH+GIT_SHA` ([#42](https://github.com/jacobbednarz/go-csp-collector/issues/42))
 
 ## v0.0.7 
 
 **Improvements**
 
-- Allow metadata smuggling by appending `metadata` query parameter to reports [#40](https://github.com/jacobbednarz/go-csp-collector/issues/40)
+- Allow metadata smuggling by appending `metadata` query parameter to reports ([#40](https://github.com/jacobbednarz/go-csp-collector/issues/40))
 
 ## v0.0.6 
 
 **Improvements**
 
-- Ignore document-uri values that don't start with `http` [#39](https://github.com/jacobbednarz/go-csp-collector/issues/39)
+- Ignore document-uri values that don't start with `http` ([#39](https://github.com/jacobbednarz/go-csp-collector/issues/39))
 
 ## v0.0.5 
 
 **Improvements**
 
-- Adds ability to have comments in filter list file [#37](https://github.com/jacobbednarz/go-csp-collector/issues/37)
+- Adds ability to have comments in filter list file ([#37](https://github.com/jacobbednarz/go-csp-collector/issues/37))
 
 ## v0.0.4 
 
