@@ -3,14 +3,14 @@
 ## TL;DR;
 
 ```console
-$ helm install -n csp-collector -f custom-values.yaml kubernetes
+$ helm upgrade csp-collector kubernetes-helm --values custom-values.yaml --install
 ```
 
 ## Introduction
 This chart deploys a Content Security Policy violation collector from
 https://github.com/jacobbednarz/go-csp-collector/
 
-Using the [kubernetes/values.yaml][1] file create a custom-values.yaml override
+Using the [kubernetes-helm/values.yaml][1] file create a custom-values.yaml override
 with just the changed values then run the command above.
 eg.
 ```
@@ -47,9 +47,9 @@ ingress:
 | `service.port`              | Service port                              | `80`                                                    |
 | `service.annotations`       | Service annotations                       | `{}`                                                    |
 | `custom`                    | CLI Param Options (see Below)             |                                                         |
+| `custom.debug`              | Logs in debug mode                        | `false`                                                 |
 | `custom.filterlist`         | Name of file within the configMaps dir for custom filters| `false` Uses list compiled into the app  |
 | `custom.jsonOutput`         | Log entries as json objects, use `false` for plain text  | `true`                                   |
-| `custom.debug`              | Logs in debug mode                        | `false`                                                 |
 
 
-[1]: https://github.com/jacobbednarz/go-csp-collector/kubernetes/values.yaml
+[1]: https://github.com/jacobbednarz/go-csp-collector/blob/master/deployment/kubernetes-helm/values.yaml

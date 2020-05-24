@@ -34,10 +34,6 @@ spec:
             - "--filter-file"
             - "/configs/{{- .Values.custom.filterlist -}}"
           {{- end }}
-          {{- if .Values.custom.graylogHost }}
-            - "--graylog"
-            - "{{- .Values.custom.graylogHost -}}"
-          {{- end }}
           {{- if .Values.custom.debug }}
             - "--debug"
           {{- end }}
