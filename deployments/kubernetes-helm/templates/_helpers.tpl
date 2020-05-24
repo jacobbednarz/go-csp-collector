@@ -30,3 +30,21 @@ Create chart name and version as used by the chart label.
 {{- define "csp-collector.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+
+{{/*
+Common labels
+*/}}
+{{- define "csp-collector.labels" -}}
+helm.sh/chart: {{ include "csp-collector.chart" . }}
+{{ include "csp-collector.selectorLabels" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}
+
+{{/*
+Selector labels
+*/}}
+{{- define "csp-collector.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "csp-collector.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+

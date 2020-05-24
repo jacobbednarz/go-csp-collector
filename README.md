@@ -81,5 +81,13 @@ violation data because there are already a bunch of great solutions out
 there. Once you have your violations being collected, be sure to slurp
 them into your favourite log aggregation tool.
 
+### Deployments
+
+Currently supported deployment mechanisms:
+
+- [kubernetes/helm][3]
+
+
 [1]: https://github.com/jacobbednarz/go-csp-collector/blob/master/sample.filterlist.txt
 [2]: https://github.com/jacobbednarz/go-csp-collector/releases
+[3]: https://github.com/jacobbednarz/go-csp-collector/blob/master/deployment/kubernetes-helm/README.md

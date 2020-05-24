@@ -1,3 +1,4 @@
+# hash indicates a comment
 resource://
 chromenull://
 chrome-extension://
@@ -11,6 +12,8 @@ chromeinvoke://
 chromeinvokeimmediate://
 mbinit://
 opera://
+ms-appx://
+ms-appx-web://
 localhost
 127.0.0.1
 none://
