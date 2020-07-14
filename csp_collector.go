@@ -43,6 +43,9 @@ var (
 	// Flag for toggling output format.
 	outputFormat string
 
+	// Flag for health check url.
+	healthCheckPath = "/_healthcheck"
+
 	// Shared defaults for the logger output. This ensures that we are
 	// using the same keys for the `FieldKey` values across both formatters.
 	logFieldMapDefaults = log.FieldMap{
@@ -114,6 +117,7 @@ func main() {
 	flag.StringVar(&outputFormat, "output-format", "text", "Define how the violation reports are formatted for output.\nDefaults to 'text'. Valid options are 'text' or 'json'")
 	flag.StringVar(&blockedURIfile, "filter-file", "", "Blocked URI Filter file")
 	flag.IntVar(&listenPort, "port", 8080, "Port to listen on")
+	flag.StringVar(&healthCheckPath, "health-check-path", healthCheckPath, "Health checker path")
 
 	flag.Parse()
 
@@ -162,7 +166,7 @@ func main() {
 }
 
 func handleViolationReport(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" && r.URL.Path == "/_healthcheck" {
+	if r.Method == "GET" && r.URL.Path == healthCheckPath {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
