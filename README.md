@@ -40,6 +40,7 @@ $ CGO_ENABLED=0 go build csp_collector.go
 |debug  |Runs in debug mode producing more verbose output|
 |port	|Port to run on, default 8080|
 |filter-file|Reads the blocked URI filter list from the specified file. Note one filter per line|
+|health-check-path|Sets path for health checkers to use, default \/_healthcheck|
 
 
 See the sample.filterlist.txt file as an example of the filter list in a file
