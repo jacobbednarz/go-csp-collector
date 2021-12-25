@@ -1,0 +1,56 @@
+[Unit]
+Description=CSP violation collector
+
+[Service]
+Type=simple
+DynamicUser=yes
+Restart=always
+RestartSec=5
+ExecStart=/usr/local/bin/go-csp-collector -filterlist /etc/csp-filterlist.txt -port 8081
+
+Restart=always
+RestartSec=5
+
+PrivateDevices=true
+PrivateTmp=yes
+PrivateUsers=yes
+
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+CapabilityBoundingSet=
+
+DevicePolicy=strict
+DeviceAllow=/dev/stderr
+DeviceAllow=/dev/stdin
+DeviceAllow=/dev/stdout
+
+LockPersonality=true
+MemoryDenyWriteExecute=true
+NoNewPrivileges=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RemoveIPC=true
+
+ProtectHome=yes
+ProtectProc=invisible
+ProcSubset=pid
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+
+ProtectSystem=strict
+ReadOnlyPaths=/etc/csp-filterlist.txt
+UMask=0077
+
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@clock @debug @module @mount @reboot @swap @resources @cpu-emulation @privileged @obsolete
+
+[Install]
+WantedBy=default.target
