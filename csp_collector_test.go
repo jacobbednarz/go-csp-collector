@@ -183,7 +183,7 @@ func TestValidateNonHttpDocumentURI(t *testing.T) {
 		DocumentURI: "about",
 	}}
 	validateErr := validateViolation(report)
-	if validateErr.Error() != fmt.Sprintf("document URI ('about') is invalid") {
+	if validateErr.Error() != "document URI ('about') is invalid" {
 		t.Errorf("expected error to include correct message string but it didn't")
 	}
 }
