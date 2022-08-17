@@ -54,10 +54,10 @@ var (
 		log.FieldKeyMsg:   "message",
 	}
 
-	// Path to file which has blocked URI's per line
+	// Path to file which has blocked URI's per line.
 	blockedURIfile string
 
-	// Default URI Filter list
+	// Default URI Filter list.
 	ignoredBlockedURIs = []string{
 		"resource://",
 		"chromenull://",
@@ -85,7 +85,7 @@ var (
 		"bdvideo://error",
 	}
 
-	// TCP Port to listen on
+	// TCP Port to listen on.
 	listenPort int
 )
 
@@ -219,7 +219,7 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 
 func validateViolation(r CSPReport) error {
 	for _, value := range ignoredBlockedURIs {
-		if strings.HasPrefix(r.Body.BlockedURI, value) == true {
+		if strings.HasPrefix(r.Body.BlockedURI, value) {
 			err := fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
 			return err
 		}
