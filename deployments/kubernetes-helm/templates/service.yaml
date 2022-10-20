@@ -16,5 +16,4 @@ spec:
       protocol: TCP
       name: http
   selector:
-    app: {{ template "csp-collector.name" . }}
-    release: {{ .Release.Name }}
+    {{- include "csp-collector.selectorLabels" . | nindent 4 }}
