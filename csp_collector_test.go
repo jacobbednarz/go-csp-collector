@@ -240,3 +240,39 @@ func TestFilterListProcessing(t *testing.T) {
 		t.Errorf("unexpected list entry; got %v", trimmed[1])
 	}
 }
+
+func TestLogsPath(t *testing.T) {
+	var logBuffer bytes.Buffer
+	log.SetOutput(&logBuffer)
+
+	csp := CSPReport{
+		CSPReportBody{
+			DocumentURI: "http://example.com",
+			BlockedURI:  "http://example.com",
+		},
+	}
+
+	payload, _ := json.Marshal(csp)
+
+	url := "/deep/link"
+
+	request, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	recorder := httptest.NewRecorder()
+
+	defaultViolationReportHandler.ServeHTTP(recorder, request)
+
+	response := recorder.Result()
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Errorf("expected HTTP status %v; got %v", http.StatusOK, response.StatusCode)
+	}
+
+	log := logBuffer.String()
+	if !strings.Contains(log, "path=/deep/link") {
+		t.Fatalf("Logged result should contain path value in '%s'", log)
+	}
+}

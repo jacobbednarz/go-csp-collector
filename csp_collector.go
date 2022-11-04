@@ -214,6 +214,7 @@ func (vrh *violationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		"script_sample":       report.Body.ScriptSample,
 		"status_code":         report.Body.StatusCode,
 		"metadata":            metadata,
+		"path":                r.URL.Path,
 	}).Info()
 }
 
