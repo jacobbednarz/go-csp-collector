@@ -37,9 +37,6 @@ var (
 	// was created at.
 	Rev = "dev"
 
-	// Flag for toggling verbose output.
-	debugFlag bool
-
 	// Flag for toggling output format.
 	outputFormat string
 
@@ -113,7 +110,7 @@ func trimEmptyAndComments(s []string) []string {
 
 func main() {
 	version := flag.Bool("version", false, "Display the version")
-	flag.BoolVar(&debugFlag, "debug", false, "Output additional logging for debugging")
+	debugFlag := flag.Bool("debug", false, "Output additional logging for debugging")
 	flag.StringVar(&outputFormat, "output-format", "text", "Define how the violation reports are formatted for output.\nDefaults to 'text'. Valid options are 'text' or 'json'")
 	flag.StringVar(&blockedURIfile, "filter-file", "", "Blocked URI Filter file")
 	flag.IntVar(&listenPort, "port", 8080, "Port to listen on")
@@ -126,7 +123,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	if debugFlag {
+	if *debugFlag {
 		log.SetLevel(log.DebugLevel)
 	}
 
