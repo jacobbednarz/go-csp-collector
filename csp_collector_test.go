@@ -13,6 +13,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var (
+	defaultViolationReportHandler = violationReportHandler{
+		blockedURIs: defaultIgnoredBlockedURIs,
+	}
+)
+
 func TestHandlerForDisallowedMethods(t *testing.T) {
 	disallowedMethods := []string{"GET", "DELETE", "PUT", "TRACE", "PATCH"}
 	randomUrls := []string{"/", "/blah"}
@@ -25,7 +31,7 @@ func TestHandlerForDisallowedMethods(t *testing.T) {
 					t.Fatalf("failed to create request: %v", err)
 				}
 				recorder := httptest.NewRecorder()
-				handleViolationReport(recorder, request)
+				defaultViolationReportHandler.ServeHTTP(recorder, request)
 
 				response := recorder.Result()
 				defer response.Body.Close()
@@ -63,7 +69,7 @@ func TestHandlerWithMetadata(t *testing.T) {
 		}
 		recorder := httptest.NewRecorder()
 
-		handleViolationReport(recorder, request)
+		defaultViolationReportHandler.ServeHTTP(recorder, request)
 
 		response := recorder.Result()
 		defer response.Body.Close()
@@ -126,7 +132,7 @@ func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 				fmt.Println("error:", jsonErr)
 			}
 
-			validateErr := validateViolation(report)
+			validateErr := defaultViolationReportHandler.validateViolation(report)
 			if validateErr == nil {
 				t.Errorf("expected error to be raised but it didn't")
 			}
@@ -152,7 +158,7 @@ func TestValidateViolationWithValidBlockedURIs(t *testing.T) {
 		fmt.Println("error:", jsonErr)
 	}
 
-	validateErr := validateViolation(report)
+	validateErr := defaultViolationReportHandler.validateViolation(report)
 	if validateErr != nil {
 		t.Errorf("expected error not be raised")
 	}
@@ -165,7 +171,8 @@ func TestValidateNonHttpDocumentURI(t *testing.T) {
 		BlockedURI:  "http://example.com/",
 		DocumentURI: "about",
 	}}
-	validateErr := validateViolation(report)
+
+	validateErr := defaultViolationReportHandler.validateViolation(report)
 	if validateErr.Error() != "document URI ('about') is invalid" {
 		t.Errorf("expected error to include correct message string but it didn't")
 	}
@@ -197,7 +204,7 @@ func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
 			}
 
 			recorder := httptest.NewRecorder()
-			handleViolationReport(recorder, request)
+			defaultViolationReportHandler.ServeHTTP(recorder, request)
 
 			response := recorder.Result()
 			defer response.Body.Close()

@@ -51,7 +51,7 @@ var (
 	}
 
 	// Default URI Filter list.
-	ignoredBlockedURIs = []string{
+	defaultIgnoredBlockedURIs = []string{
 		"resource://",
 		"chromenull://",
 		"chrome-extension://",
@@ -135,6 +135,7 @@ func main() {
 	}
 
 	log.Debug("Starting up...")
+	ignoredBlockedURIs := defaultIgnoredBlockedURIs
 	if *blockedURIFile != "" {
 		log.Debugf("Using Filter list from file at: %s\n", *blockedURIFile)
 
@@ -159,11 +160,17 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	http.HandleFunc("/", handleViolationReport)
+	http.Handle("/", &violationReportHandler{
+		blockedURIs: ignoredBlockedURIs,
+	})
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), nil))
 }
 
-func handleViolationReport(w http.ResponseWriter, r *http.Request) {
+type violationReportHandler struct {
+	blockedURIs []string
+}
+
+func (vrh *violationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		log.WithFields(log.Fields{
@@ -183,7 +190,7 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	reportValidation := validateViolation(report)
+	reportValidation := vrh.validateViolation(report)
 	if reportValidation != nil {
 		http.Error(w, reportValidation.Error(), http.StatusBadRequest)
 		log.Debugf("Received invalid payload: %s", reportValidation.Error())
@@ -210,8 +217,8 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 	}).Info()
 }
 
-func validateViolation(r CSPReport) error {
-	for _, value := range ignoredBlockedURIs {
+func (vrh *violationReportHandler) validateViolation(r CSPReport) error {
+	for _, value := range vrh.blockedURIs {
 		if strings.HasPrefix(r.Body.BlockedURI, value) {
 			err := fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
 			return err
