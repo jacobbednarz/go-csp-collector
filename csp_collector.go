@@ -48,9 +48,6 @@ var (
 		log.FieldKeyMsg:   "message",
 	}
 
-	// Path to file which has blocked URI's per line.
-	blockedURIfile string
-
 	// Default URI Filter list.
 	ignoredBlockedURIs = []string{
 		"resource://",
@@ -109,7 +106,7 @@ func main() {
 	version := flag.Bool("version", false, "Display the version")
 	debugFlag := flag.Bool("debug", false, "Output additional logging for debugging")
 	outputFormat := flag.String("output-format", "text", "Define how the violation reports are formatted for output.\nDefaults to 'text'. Valid options are 'text' or 'json'")
-	flag.StringVar(&blockedURIfile, "filter-file", "", "Blocked URI Filter file")
+	blockedURIFile := flag.String("filter-file", "", "Blocked URI Filter file")
 	flag.IntVar(&listenPort, "port", 8080, "Port to listen on")
 	flag.StringVar(&healthCheckPath, "health-check-path", healthCheckPath, "Health checker path")
 
@@ -139,12 +136,12 @@ func main() {
 	}
 
 	log.Debug("Starting up...")
-	if blockedURIfile != "" {
-		log.Debugf("Using Filter list from file at: %s\n", blockedURIfile)
+	if *blockedURIFile != "" {
+		log.Debugf("Using Filter list from file at: %s\n", *blockedURIFile)
 
-		content, err := ioutil.ReadFile(blockedURIfile)
+		content, err := ioutil.ReadFile(*blockedURIFile)
 		if err != nil {
-			log.Fatalf("Error reading Blocked File list: %s", blockedURIfile)
+			log.Fatalf("Error reading Blocked File list: %s", *blockedURIFile)
 		}
 		ignoredBlockedURIs = trimEmptyAndComments(strings.Split(string(content), "\n"))
 	} else {
