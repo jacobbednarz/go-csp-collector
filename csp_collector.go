@@ -32,13 +32,15 @@ type CSPReportBody struct {
 	StatusCode         interface{} `json:"status-code"`
 }
 
+const (
+	// Default health check url.
+	defaultHealthCheckPath = "/_healthcheck"
+)
+
 var (
 	// Rev is set at build time and holds the revision that the package
 	// was created at.
 	Rev = "dev"
-
-	// Flag for health check url.
-	healthCheckPath = "/_healthcheck"
 
 	// Shared defaults for the logger output. This ensures that we are
 	// using the same keys for the `FieldKey` values across both formatters.
@@ -105,7 +107,7 @@ func main() {
 	outputFormat := flag.String("output-format", "text", "Define how the violation reports are formatted for output.\nDefaults to 'text'. Valid options are 'text' or 'json'")
 	blockedURIFile := flag.String("filter-file", "", "Blocked URI Filter file")
 	listenPort := flag.Int("port", 8080, "Port to listen on")
-	flag.StringVar(&healthCheckPath, "health-check-path", healthCheckPath, "Health checker path")
+	healthCheckPath := flag.String("health-check-path", defaultHealthCheckPath, "Health checker path")
 
 	flag.Parse()
 
@@ -148,7 +150,7 @@ func main() {
 	log.Debugf("Blocked URI List: %s", ignoredBlockedURIs)
 	log.Debugf("Listening on TCP Port: %s", strconv.Itoa(*listenPort))
 
-	http.HandleFunc(healthCheckPath, func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc(*healthCheckPath, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
