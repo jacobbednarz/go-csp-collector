@@ -37,9 +37,6 @@ var (
 	// was created at.
 	Rev = "dev"
 
-	// Flag for toggling output format.
-	outputFormat string
-
 	// Flag for health check url.
 	healthCheckPath = "/_healthcheck"
 
@@ -111,7 +108,7 @@ func trimEmptyAndComments(s []string) []string {
 func main() {
 	version := flag.Bool("version", false, "Display the version")
 	debugFlag := flag.Bool("debug", false, "Output additional logging for debugging")
-	flag.StringVar(&outputFormat, "output-format", "text", "Define how the violation reports are formatted for output.\nDefaults to 'text'. Valid options are 'text' or 'json'")
+	outputFormat := flag.String("output-format", "text", "Define how the violation reports are formatted for output.\nDefaults to 'text'. Valid options are 'text' or 'json'")
 	flag.StringVar(&blockedURIfile, "filter-file", "", "Blocked URI Filter file")
 	flag.IntVar(&listenPort, "port", 8080, "Port to listen on")
 	flag.StringVar(&healthCheckPath, "health-check-path", healthCheckPath, "Health checker path")
@@ -127,7 +124,7 @@ func main() {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	if outputFormat == "json" {
+	if *outputFormat == "json" {
 		log.SetFormatter(&log.JSONFormatter{
 			FieldMap: logFieldMapDefaults,
 		})
