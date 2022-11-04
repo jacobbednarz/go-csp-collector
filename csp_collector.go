@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -110,6 +111,9 @@ func main() {
 	healthCheckPath := flag.String("health-check-path", defaultHealthCheckPath, "Health checker path")
 	truncateQueryStringFragment := flag.Bool("truncate-query-fragment", false, "Truncate query string and fragment from document-uri, referrer and blocked-uri before logging (to reduce chances of accidentally logging sensitive data)")
 
+	logClientIP := flag.Bool("log-client-ip", false, "Log the reporting client IP address")
+	logTruncatedClientIP := flag.Bool("log-truncated-client-ip", false, "Log the truncated client IP address (IPv4: /24, IPv6: /64")
+
 	flag.Parse()
 
 	if *version {
@@ -164,6 +168,9 @@ func main() {
 	http.Handle("/", &violationReportHandler{
 		blockedURIs:                 ignoredBlockedURIs,
 		truncateQueryStringFragment: *truncateQueryStringFragment,
+
+		logClientIP:          *logClientIP,
+		logTruncatedClientIP: *logTruncatedClientIP,
 	})
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), nil))
 }
@@ -171,6 +178,9 @@ func main() {
 type violationReportHandler struct {
 	truncateQueryStringFragment bool
 	blockedURIs                 []string
+
+	logClientIP          bool
+	logTruncatedClientIP bool
 }
 
 func (vrh *violationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -206,19 +216,10 @@ func (vrh *violationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		metadata = metadatas[0]
 	}
 
-	documentURI := report.Body.DocumentURI
-	referrer := report.Body.Referrer
-	blockedURI := report.Body.BlockedURI
-	if vrh.truncateQueryStringFragment {
-		documentURI = truncateQueryStringFragment(documentURI)
-		referrer = truncateQueryStringFragment(referrer)
-		blockedURI = truncateQueryStringFragment(blockedURI)
-	}
-
-	log.WithFields(log.Fields{
-		"document_uri":        documentURI,
-		"referrer":            referrer,
-		"blocked_uri":         blockedURI,
+	lf := log.Fields{
+		"document_uri":       report.Body.DocumentURI,
+		"referrer":            report.Body.Referrer,
+		"blocked_uri":         report.Body.BlockedURI,
 		"violated_directive":  report.Body.ViolatedDirective,
 		"effective_directive": report.Body.EffectiveDirective,
 		"original_policy":     report.Body.OriginalPolicy,
@@ -227,7 +228,31 @@ func (vrh *violationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		"status_code":         report.Body.StatusCode,
 		"metadata":            metadata,
 		"path":                r.URL.Path,
-	}).Info()
+	}
+
+	if vrh.truncateQueryStringFragment {
+		lf["document_uri"] = truncateQueryStringFragment(report.Body.DocumentURI)
+		lf["referrer"] = truncateQueryStringFragment(report.Body.Referrer)
+		lf["blocked_uri"] = truncateQueryStringFragment(report.Body.BlockedURI)
+	}
+
+	if vrh.logClientIP {
+		ip, err := getClientIP(r)
+		if err != nil {
+			log.Warnf("unable to parse client ip: %s", err)
+		}
+		lf["client_ip"] = ip.String()
+	}
+
+	if vrh.logTruncatedClientIP {
+		ip, err := getClientIP(r)
+		if err != nil {
+			log.Warnf("unable to parse client ip: %s", err)
+		}
+		lf["client_ip"] = truncateClientIP(ip)
+	}
+
+	log.WithFields(lf).Info()
 }
 
 func (vrh *violationReportHandler) validateViolation(r CSPReport) error {
@@ -252,4 +277,28 @@ func truncateQueryStringFragment(uri string) string {
 	}
 
 	return uri
+}
+
+func truncateClientIP(a netip.Addr) string {
+	// Ignoring the error is statically safe, as there are always enough bits.
+	if a.Is4() {
+		p, _ := a.Prefix(24)
+		return p.String()
+	}
+
+	if a.Is6() {
+		p, _ := a.Prefix(64)
+		return p.String()
+	}
+
+	return "unknown-address"
+}
+
+func getClientIP(r *http.Request) (netip.Addr, error) {
+	if s := r.Header.Get("X-Forwarded-For"); s != "" {
+		return netip.ParseAddr(s)
+	}
+
+	addrp, err := netip.ParseAddrPort(r.RemoteAddr)
+	return addrp.Addr(), err
 }
