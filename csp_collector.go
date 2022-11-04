@@ -160,16 +160,20 @@ func main() {
 	log.Debugf("Blocked URI List: %s", ignoredBlockedURIs)
 	log.Debugf("Listening on TCP Port: %s", strconv.Itoa(listenPort))
 
+	http.HandleFunc(healthCheckPath, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
+
 	http.HandleFunc("/", handleViolationReport)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(listenPort)), nil))
 }
 
 func handleViolationReport(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" && r.URL.Path == healthCheckPath {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		log.WithFields(log.Fields{

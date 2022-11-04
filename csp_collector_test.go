@@ -38,23 +38,6 @@ func TestHandlerForDisallowedMethods(t *testing.T) {
 	}
 }
 
-func TestHandlerForAllowingHealthcheck(t *testing.T) {
-	request, err := http.NewRequest("GET", "/_healthcheck", nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-	recorder := httptest.NewRecorder()
-
-	handleViolationReport(recorder, request)
-
-	response := recorder.Result()
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		t.Errorf("expected HTTP status %v; got %v", http.StatusOK, response.StatusCode)
-	}
-}
-
 func TestHandlerWithMetadata(t *testing.T) {
 	csp := CSPReport{
 		CSPReportBody{
