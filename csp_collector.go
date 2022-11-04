@@ -75,9 +75,6 @@ var (
 		"nativebaiduhd://adblock",
 		"bdvideo://error",
 	}
-
-	// TCP Port to listen on.
-	listenPort int
 )
 
 func init() {
@@ -107,7 +104,7 @@ func main() {
 	debugFlag := flag.Bool("debug", false, "Output additional logging for debugging")
 	outputFormat := flag.String("output-format", "text", "Define how the violation reports are formatted for output.\nDefaults to 'text'. Valid options are 'text' or 'json'")
 	blockedURIFile := flag.String("filter-file", "", "Blocked URI Filter file")
-	flag.IntVar(&listenPort, "port", 8080, "Port to listen on")
+	listenPort := flag.Int("port", 8080, "Port to listen on")
 	flag.StringVar(&healthCheckPath, "health-check-path", healthCheckPath, "Health checker path")
 
 	flag.Parse()
@@ -149,7 +146,7 @@ func main() {
 	}
 
 	log.Debugf("Blocked URI List: %s", ignoredBlockedURIs)
-	log.Debugf("Listening on TCP Port: %s", strconv.Itoa(listenPort))
+	log.Debugf("Listening on TCP Port: %s", strconv.Itoa(*listenPort))
 
 	http.HandleFunc(healthCheckPath, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -161,7 +158,7 @@ func main() {
 	})
 
 	http.HandleFunc("/", handleViolationReport)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(listenPort)), nil))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), nil))
 }
 
 func handleViolationReport(w http.ResponseWriter, r *http.Request) {
