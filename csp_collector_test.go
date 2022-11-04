@@ -15,7 +15,8 @@ import (
 
 var (
 	defaultViolationReportHandler = violationReportHandler{
-		blockedURIs: defaultIgnoredBlockedURIs,
+		blockedURIs:                 defaultIgnoredBlockedURIs,
+		truncateQueryStringFragment: false,
 	}
 )
 
@@ -274,5 +275,31 @@ func TestLogsPath(t *testing.T) {
 	log := logBuffer.String()
 	if !strings.Contains(log, "path=/deep/link") {
 		t.Fatalf("Logged result should contain path value in '%s'", log)
+	}
+}
+
+func TestTruncateQueryStringFragment(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		original string
+		expected string
+	}{
+		{"http://localhost.com/?test#anchor", "http://localhost.com/"},
+		{"http://example.invalid", "http://example.invalid"},
+		{"http://example.invalid#a", "http://example.invalid"},
+		{"http://example.invalid?a", "http://example.invalid"},
+		{"http://example.invalid#b?a", "http://example.invalid"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.original, func(t *testing.T) {
+			t.Parallel()
+			actual := truncateQueryStringFragment(tc.original)
+			if actual != tc.expected {
+				t.Errorf("truncating '%s' yielded '%s', expected '%s'", tc.original, actual, tc.expected)
+			}
+		})
 	}
 }

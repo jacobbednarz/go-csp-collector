@@ -108,6 +108,7 @@ func main() {
 	blockedURIFile := flag.String("filter-file", "", "Blocked URI Filter file")
 	listenPort := flag.Int("port", 8080, "Port to listen on")
 	healthCheckPath := flag.String("health-check-path", defaultHealthCheckPath, "Health checker path")
+	truncateQueryStringFragment := flag.Bool("truncate-query-fragment", false, "Truncate query string and fragment from document-uri, referrer and blocked-uri before logging (to reduce chances of accidentally logging sensitive data)")
 
 	flag.Parse()
 
@@ -161,13 +162,15 @@ func main() {
 	})
 
 	http.Handle("/", &violationReportHandler{
-		blockedURIs: ignoredBlockedURIs,
+		blockedURIs:                 ignoredBlockedURIs,
+		truncateQueryStringFragment: *truncateQueryStringFragment,
 	})
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), nil))
 }
 
 type violationReportHandler struct {
-	blockedURIs []string
+	truncateQueryStringFragment bool
+	blockedURIs                 []string
 }
 
 func (vrh *violationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -203,10 +206,19 @@ func (vrh *violationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		metadata = metadatas[0]
 	}
 
+	documentURI := report.Body.DocumentURI
+	referrer := report.Body.Referrer
+	blockedURI := report.Body.BlockedURI
+	if vrh.truncateQueryStringFragment {
+		documentURI = truncateQueryStringFragment(documentURI)
+		referrer = truncateQueryStringFragment(referrer)
+		blockedURI = truncateQueryStringFragment(blockedURI)
+	}
+
 	log.WithFields(log.Fields{
-		"document_uri":        report.Body.DocumentURI,
-		"referrer":            report.Body.Referrer,
-		"blocked_uri":         report.Body.BlockedURI,
+		"document_uri":        documentURI,
+		"referrer":            referrer,
+		"blocked_uri":         blockedURI,
 		"violated_directive":  report.Body.ViolatedDirective,
 		"effective_directive": report.Body.EffectiveDirective,
 		"original_policy":     report.Body.OriginalPolicy,
@@ -231,4 +243,13 @@ func (vrh *violationReportHandler) validateViolation(r CSPReport) error {
 	}
 
 	return nil
+}
+
+func truncateQueryStringFragment(uri string) string {
+	idx := strings.IndexAny(uri, "#?")
+	if idx != -1 {
+		return uri[:idx]
+	}
+
+	return uri
 }
