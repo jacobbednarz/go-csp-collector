@@ -126,14 +126,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	if blockedURIfile != "" {
-		content, err := ioutil.ReadFile(blockedURIfile)
-		if err != nil {
-			fmt.Printf("Error reading Blocked File list: %s", blockedURIfile)
-		}
-		ignoredBlockedURIs = trimEmptyAndComments(strings.Split(string(content), "\n"))
-	}
-
 	if debugFlag {
 		log.SetLevel(log.DebugLevel)
 	}
@@ -155,9 +147,16 @@ func main() {
 	log.Debug("Starting up...")
 	if blockedURIfile != "" {
 		log.Debugf("Using Filter list from file at: %s\n", blockedURIfile)
+
+		content, err := ioutil.ReadFile(blockedURIfile)
+		if err != nil {
+			log.Fatalf("Error reading Blocked File list: %s", blockedURIfile)
+		}
+		ignoredBlockedURIs = trimEmptyAndComments(strings.Split(string(content), "\n"))
 	} else {
 		log.Debug("Using Filter list from internal list")
 	}
+
 	log.Debugf("Blocked URI List: %s", ignoredBlockedURIs)
 	log.Debugf("Listening on TCP Port: %s", strconv.Itoa(listenPort))
 
@@ -185,7 +184,7 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 	err := decoder.Decode(&report)
 	if err != nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		log.Debug(fmt.Sprintf("Unable to decode invalid JSON payload: %s", err))
+		log.Debugf("Unable to decode invalid JSON payload: %s", err)
 		return
 	}
 	defer r.Body.Close()
@@ -193,7 +192,7 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 	reportValidation := validateViolation(report)
 	if reportValidation != nil {
 		http.Error(w, reportValidation.Error(), http.StatusBadRequest)
-		log.Debug(fmt.Sprintf("Received invalid payload: %s", reportValidation.Error()))
+		log.Debugf("Received invalid payload: %s", reportValidation.Error())
 		return
 	}
 
