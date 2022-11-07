@@ -114,6 +114,8 @@ func main() {
 	logClientIP := flag.Bool("log-client-ip", false, "Log the reporting client IP address")
 	logTruncatedClientIP := flag.Bool("log-truncated-client-ip", false, "Log the truncated client IP address (IPv4: /24, IPv6: /64")
 
+	metadataObject := flag.Bool("query-params-metadata", false, "Write query parameters of the report URI as JSON object under metadata instead of the single metadata string")
+
 	flag.Parse()
 
 	if *version {
@@ -171,6 +173,7 @@ func main() {
 
 		logClientIP:          *logClientIP,
 		logTruncatedClientIP: *logTruncatedClientIP,
+		metadataObject:       *metadataObject,
 	})
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), nil))
 }
@@ -181,6 +184,7 @@ type violationReportHandler struct {
 
 	logClientIP          bool
 	logTruncatedClientIP bool
+	metadataObject       bool
 }
 
 func (vrh *violationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -211,10 +215,21 @@ func (vrh *violationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	metadatas, gotMetadata := r.URL.Query()["metadata"]
-	var metadata string
-	if gotMetadata {
-		metadata = metadatas[0]
+	var metadata interface{}
+	if vrh.metadataObject {
+		metadataMap := make(map[string]string)
+		query := r.URL.Query()
+
+		for k, v := range query {
+			metadataMap[k] = v[0]
+		}
+
+		metadata = metadataMap
+	} else {
+		metadatas, gotMetadata := r.URL.Query()["metadata"]
+		if gotMetadata {
+			metadata = metadatas[0]
+		}
 	}
 
 	lf := log.Fields{

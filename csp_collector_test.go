@@ -87,6 +87,42 @@ func TestHandlerWithMetadata(t *testing.T) {
 	}
 }
 
+func TestHandlerWithMetadataObject(t *testing.T) {
+	csp := CSPReport{
+		CSPReportBody{
+			DocumentURI: "http://example.com",
+			BlockedURI:  "http://example.com",
+		},
+	}
+
+	payload, _ := json.Marshal(csp)
+
+	var logBuffer bytes.Buffer
+	log.SetOutput(&logBuffer)
+
+	request, err := http.NewRequest("POST", "/path?a=b&c=d", bytes.NewBuffer(payload))
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	recorder := httptest.NewRecorder()
+
+	objectHandler := defaultViolationReportHandler
+	objectHandler.metadataObject = true
+	objectHandler.ServeHTTP(recorder, request)
+
+	response := recorder.Result()
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Errorf("expected HTTP status %v; got %v", http.StatusOK, response.StatusCode)
+	}
+
+	log := logBuffer.String()
+	if !strings.Contains(log, "metadata=\"map[a:b c:d]\"") {
+		t.Fatalf("Logged result should contain metadata map '%s'", log)
+	}
+}
+
 func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 	invalidBlockedURIs := []string{
 		"resource://",
