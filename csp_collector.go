@@ -184,11 +184,12 @@ type violationReportHandler struct {
 }
 
 func (vrh *violationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
+	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		log.WithFields(log.Fields{
 			"http_method": r.Method,
 		}).Debug("Received invalid HTTP method")
+
 		return
 	}
 
@@ -217,7 +218,7 @@ func (vrh *violationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	}
 
 	lf := log.Fields{
-		"document_uri":       report.Body.DocumentURI,
+		"document_uri":        report.Body.DocumentURI,
 		"referrer":            report.Body.Referrer,
 		"blocked_uri":         report.Body.BlockedURI,
 		"violated_directive":  report.Body.ViolatedDirective,
@@ -279,15 +280,15 @@ func truncateQueryStringFragment(uri string) string {
 	return uri
 }
 
-func truncateClientIP(a netip.Addr) string {
+func truncateClientIP(addr netip.Addr) string {
 	// Ignoring the error is statically safe, as there are always enough bits.
-	if a.Is4() {
-		p, _ := a.Prefix(24)
+	if addr.Is4() {
+		p, _ := addr.Prefix(24)
 		return p.String()
 	}
 
-	if a.Is6() {
-		p, _ := a.Prefix(64)
+	if addr.Is6() {
+		p, _ := addr.Prefix(64)
 		return p.String()
 	}
 
@@ -296,9 +297,18 @@ func truncateClientIP(a netip.Addr) string {
 
 func getClientIP(r *http.Request) (netip.Addr, error) {
 	if s := r.Header.Get("X-Forwarded-For"); s != "" {
-		return netip.ParseAddr(s)
+		addr, err := netip.ParseAddr(s)
+		if err != nil {
+			return netip.Addr{}, fmt.Errorf("unable to parse address from X-Forwarded-For=%s: %w", s, err)
+		}
+
+		return addr, nil
 	}
 
 	addrp, err := netip.ParseAddrPort(r.RemoteAddr)
-	return addrp.Addr(), err
+	if err != nil {
+		return netip.Addr{}, fmt.Errorf("unable to parse remote address %s: %w", r.RemoteAddr, err)
+	}
+
+	return addrp.Addr(), nil
 }

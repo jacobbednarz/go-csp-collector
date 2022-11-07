@@ -13,12 +13,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var (
-	defaultViolationReportHandler = violationReportHandler{
-		blockedURIs:                 defaultIgnoredBlockedURIs,
-		truncateQueryStringFragment: false,
-	}
-)
+var defaultViolationReportHandler = violationReportHandler{
+	blockedURIs:                 defaultIgnoredBlockedURIs,
+	truncateQueryStringFragment: false,
+}
 
 func TestHandlerForDisallowedMethods(t *testing.T) {
 	disallowedMethods := []string{"GET", "DELETE", "PUT", "TRACE", "PATCH"}
@@ -120,7 +118,7 @@ func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 		testName := strings.Replace(blockedURI, "://", "", -1)
 
 		t.Run(testName, func(t *testing.T) {
-			var rawReport = []byte(fmt.Sprintf(`{
+			rawReport := []byte(fmt.Sprintf(`{
 				"csp-report": {
 					"document-uri": "https://example.com",
 					"blocked-uri": "%s"
@@ -146,7 +144,7 @@ func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 }
 
 func TestValidateViolationWithValidBlockedURIs(t *testing.T) {
-	var rawReport = []byte(`{
+	rawReport := []byte(`{
 		"csp-report": {
 			"document-uri": "https://example.com",
 			"blocked-uri": "https://google.com/example.css"
