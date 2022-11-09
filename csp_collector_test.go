@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -200,7 +200,7 @@ func TestValidateViolationWithValidBlockedURIs(t *testing.T) {
 }
 
 func TestValidateNonHttpDocumentURI(t *testing.T) {
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 
 	report := CSPReport{Body: CSPReportBody{
 		BlockedURI:  "http://example.com/",
@@ -215,7 +215,7 @@ func TestValidateNonHttpDocumentURI(t *testing.T) {
 
 func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
 	// Discard the output we create from the calls here.
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 
 	statusCodeValues := []interface{}{"200", 200}
 
@@ -253,7 +253,7 @@ func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
 
 func TestFilterListProcessing(t *testing.T) {
 	// Discard the output we create from the calls here.
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 
 	blockList := []string{
 		"resource://",

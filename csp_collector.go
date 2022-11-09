@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/netip"
 	"os"
@@ -146,7 +145,7 @@ func main() {
 	if *blockedURIFile != "" {
 		log.Debugf("Using Filter list from file at: %s\n", *blockedURIFile)
 
-		content, err := ioutil.ReadFile(*blockedURIFile)
+		content, err := os.ReadFile(*blockedURIFile)
 		if err != nil {
 			log.Fatalf("Error reading Blocked File list: %s", *blockedURIFile)
 		}
