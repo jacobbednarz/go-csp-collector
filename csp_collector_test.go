@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +12,11 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
+
+var defaultViolationReportHandler = violationReportHandler{
+	blockedURIs:                 defaultIgnoredBlockedURIs,
+	truncateQueryStringFragment: false,
+}
 
 func TestHandlerForDisallowedMethods(t *testing.T) {
 	disallowedMethods := []string{"GET", "DELETE", "PUT", "TRACE", "PATCH"}
@@ -25,7 +30,7 @@ func TestHandlerForDisallowedMethods(t *testing.T) {
 					t.Fatalf("failed to create request: %v", err)
 				}
 				recorder := httptest.NewRecorder()
-				handleViolationReport(recorder, request)
+				defaultViolationReportHandler.ServeHTTP(recorder, request)
 
 				response := recorder.Result()
 				defer response.Body.Close()
@@ -35,23 +40,6 @@ func TestHandlerForDisallowedMethods(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-func TestHandlerForAllowingHealthcheck(t *testing.T) {
-	request, err := http.NewRequest("GET", "/_healthcheck", nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-	recorder := httptest.NewRecorder()
-
-	handleViolationReport(recorder, request)
-
-	response := recorder.Result()
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		t.Errorf("expected HTTP status %v; got %v", http.StatusOK, response.StatusCode)
 	}
 }
 
@@ -80,7 +68,7 @@ func TestHandlerWithMetadata(t *testing.T) {
 		}
 		recorder := httptest.NewRecorder()
 
-		handleViolationReport(recorder, request)
+		defaultViolationReportHandler.ServeHTTP(recorder, request)
 
 		response := recorder.Result()
 		defer response.Body.Close()
@@ -96,6 +84,42 @@ func TestHandlerWithMetadata(t *testing.T) {
 		if strings.Contains(log, "metadata=value1") {
 			t.Fatalf("Logged result shouldn't contain metadata value1 in '%s'", log)
 		}
+	}
+}
+
+func TestHandlerWithMetadataObject(t *testing.T) {
+	csp := CSPReport{
+		CSPReportBody{
+			DocumentURI: "http://example.com",
+			BlockedURI:  "http://example.com",
+		},
+	}
+
+	payload, _ := json.Marshal(csp)
+
+	var logBuffer bytes.Buffer
+	log.SetOutput(&logBuffer)
+
+	request, err := http.NewRequest("POST", "/path?a=b&c=d", bytes.NewBuffer(payload))
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	recorder := httptest.NewRecorder()
+
+	objectHandler := defaultViolationReportHandler
+	objectHandler.metadataObject = true
+	objectHandler.ServeHTTP(recorder, request)
+
+	response := recorder.Result()
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Errorf("expected HTTP status %v; got %v", http.StatusOK, response.StatusCode)
+	}
+
+	log := logBuffer.String()
+	if !strings.Contains(log, "metadata=\"map[a:b c:d]\"") {
+		t.Fatalf("Logged result should contain metadata map '%s'", log)
 	}
 }
 
@@ -130,7 +154,7 @@ func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 		testName := strings.Replace(blockedURI, "://", "", -1)
 
 		t.Run(testName, func(t *testing.T) {
-			var rawReport = []byte(fmt.Sprintf(`{
+			rawReport := []byte(fmt.Sprintf(`{
 				"csp-report": {
 					"document-uri": "https://example.com",
 					"blocked-uri": "%s"
@@ -143,7 +167,7 @@ func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 				fmt.Println("error:", jsonErr)
 			}
 
-			validateErr := validateViolation(report)
+			validateErr := defaultViolationReportHandler.validateViolation(report)
 			if validateErr == nil {
 				t.Errorf("expected error to be raised but it didn't")
 			}
@@ -156,7 +180,7 @@ func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 }
 
 func TestValidateViolationWithValidBlockedURIs(t *testing.T) {
-	var rawReport = []byte(`{
+	rawReport := []byte(`{
 		"csp-report": {
 			"document-uri": "https://example.com",
 			"blocked-uri": "https://google.com/example.css"
@@ -169,20 +193,21 @@ func TestValidateViolationWithValidBlockedURIs(t *testing.T) {
 		fmt.Println("error:", jsonErr)
 	}
 
-	validateErr := validateViolation(report)
+	validateErr := defaultViolationReportHandler.validateViolation(report)
 	if validateErr != nil {
 		t.Errorf("expected error not be raised")
 	}
 }
 
 func TestValidateNonHttpDocumentURI(t *testing.T) {
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 
 	report := CSPReport{Body: CSPReportBody{
 		BlockedURI:  "http://example.com/",
 		DocumentURI: "about",
 	}}
-	validateErr := validateViolation(report)
+
+	validateErr := defaultViolationReportHandler.validateViolation(report)
 	if validateErr.Error() != "document URI ('about') is invalid" {
 		t.Errorf("expected error to include correct message string but it didn't")
 	}
@@ -190,7 +215,7 @@ func TestValidateNonHttpDocumentURI(t *testing.T) {
 
 func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
 	// Discard the output we create from the calls here.
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 
 	statusCodeValues := []interface{}{"200", 200}
 
@@ -214,7 +239,7 @@ func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
 			}
 
 			recorder := httptest.NewRecorder()
-			handleViolationReport(recorder, request)
+			defaultViolationReportHandler.ServeHTTP(recorder, request)
 
 			response := recorder.Result()
 			defer response.Body.Close()
@@ -228,7 +253,7 @@ func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
 
 func TestFilterListProcessing(t *testing.T) {
 	// Discard the output we create from the calls here.
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 
 	blockList := []string{
 		"resource://",
@@ -248,5 +273,67 @@ func TestFilterListProcessing(t *testing.T) {
 	}
 	if trimmed[1] != "chrome-extension://" {
 		t.Errorf("unexpected list entry; got %v", trimmed[1])
+	}
+}
+
+func TestLogsPath(t *testing.T) {
+	var logBuffer bytes.Buffer
+	log.SetOutput(&logBuffer)
+
+	csp := CSPReport{
+		CSPReportBody{
+			DocumentURI: "http://example.com",
+			BlockedURI:  "http://example.com",
+		},
+	}
+
+	payload, _ := json.Marshal(csp)
+
+	url := "/deep/link"
+
+	request, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	recorder := httptest.NewRecorder()
+
+	defaultViolationReportHandler.ServeHTTP(recorder, request)
+
+	response := recorder.Result()
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Errorf("expected HTTP status %v; got %v", http.StatusOK, response.StatusCode)
+	}
+
+	log := logBuffer.String()
+	if !strings.Contains(log, "path=/deep/link") {
+		t.Fatalf("Logged result should contain path value in '%s'", log)
+	}
+}
+
+func TestTruncateQueryStringFragment(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		original string
+		expected string
+	}{
+		{"http://localhost.com/?test#anchor", "http://localhost.com/"},
+		{"http://example.invalid", "http://example.invalid"},
+		{"http://example.invalid#a", "http://example.invalid"},
+		{"http://example.invalid?a", "http://example.invalid"},
+		{"http://example.invalid#b?a", "http://example.invalid"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.original, func(t *testing.T) {
+			t.Parallel()
+			actual := truncateQueryStringFragment(tc.original)
+			if actual != tc.expected {
+				t.Errorf("truncating '%s' yielded '%s', expected '%s'", tc.original, actual, tc.expected)
+			}
+		})
 	}
 }

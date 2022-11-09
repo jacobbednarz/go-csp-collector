@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -32,19 +32,15 @@ type CSPReportBody struct {
 	StatusCode         interface{} `json:"status-code"`
 }
 
+const (
+	// Default health check url.
+	defaultHealthCheckPath = "/_healthcheck"
+)
+
 var (
 	// Rev is set at build time and holds the revision that the package
 	// was created at.
 	Rev = "dev"
-
-	// Flag for toggling verbose output.
-	debugFlag bool
-
-	// Flag for toggling output format.
-	outputFormat string
-
-	// Flag for health check url.
-	healthCheckPath = "/_healthcheck"
 
 	// Shared defaults for the logger output. This ensures that we are
 	// using the same keys for the `FieldKey` values across both formatters.
@@ -54,11 +50,8 @@ var (
 		log.FieldKeyMsg:   "message",
 	}
 
-	// Path to file which has blocked URI's per line.
-	blockedURIfile string
-
 	// Default URI Filter list.
-	ignoredBlockedURIs = []string{
+	defaultIgnoredBlockedURIs = []string{
 		"resource://",
 		"chromenull://",
 		"chrome-extension://",
@@ -84,9 +77,6 @@ var (
 		"nativebaiduhd://adblock",
 		"bdvideo://error",
 	}
-
-	// TCP Port to listen on.
-	listenPort int
 )
 
 func init() {
@@ -113,11 +103,17 @@ func trimEmptyAndComments(s []string) []string {
 
 func main() {
 	version := flag.Bool("version", false, "Display the version")
-	flag.BoolVar(&debugFlag, "debug", false, "Output additional logging for debugging")
-	flag.StringVar(&outputFormat, "output-format", "text", "Define how the violation reports are formatted for output.\nDefaults to 'text'. Valid options are 'text' or 'json'")
-	flag.StringVar(&blockedURIfile, "filter-file", "", "Blocked URI Filter file")
-	flag.IntVar(&listenPort, "port", 8080, "Port to listen on")
-	flag.StringVar(&healthCheckPath, "health-check-path", healthCheckPath, "Health checker path")
+	debugFlag := flag.Bool("debug", false, "Output additional logging for debugging")
+	outputFormat := flag.String("output-format", "text", "Define how the violation reports are formatted for output.\nDefaults to 'text'. Valid options are 'text' or 'json'")
+	blockedURIFile := flag.String("filter-file", "", "Blocked URI Filter file")
+	listenPort := flag.Int("port", 8080, "Port to listen on")
+	healthCheckPath := flag.String("health-check-path", defaultHealthCheckPath, "Health checker path")
+	truncateQueryStringFragment := flag.Bool("truncate-query-fragment", false, "Truncate query string and fragment from document-uri, referrer and blocked-uri before logging (to reduce chances of accidentally logging sensitive data)")
+
+	logClientIP := flag.Bool("log-client-ip", false, "Log the reporting client IP address")
+	logTruncatedClientIP := flag.Bool("log-truncated-client-ip", false, "Log the truncated client IP address (IPv4: /24, IPv6: /64")
+
+	metadataObject := flag.Bool("query-params-metadata", false, "Write query parameters of the report URI as JSON object under metadata instead of the single metadata string")
 
 	flag.Parse()
 
@@ -126,19 +122,11 @@ func main() {
 		os.Exit(0)
 	}
 
-	if blockedURIfile != "" {
-		content, err := ioutil.ReadFile(blockedURIfile)
-		if err != nil {
-			fmt.Printf("Error reading Blocked File list: %s", blockedURIfile)
-		}
-		ignoredBlockedURIs = trimEmptyAndComments(strings.Split(string(content), "\n"))
-	}
-
-	if debugFlag {
+	if *debugFlag {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	if outputFormat == "json" {
+	if *outputFormat == "json" {
 		log.SetFormatter(&log.JSONFormatter{
 			FieldMap: logFieldMapDefaults,
 		})
@@ -153,29 +141,58 @@ func main() {
 	}
 
 	log.Debug("Starting up...")
-	if blockedURIfile != "" {
-		log.Debugf("Using Filter list from file at: %s\n", blockedURIfile)
+	ignoredBlockedURIs := defaultIgnoredBlockedURIs
+	if *blockedURIFile != "" {
+		log.Debugf("Using Filter list from file at: %s\n", *blockedURIFile)
+
+		content, err := os.ReadFile(*blockedURIFile)
+		if err != nil {
+			log.Fatalf("Error reading Blocked File list: %s", *blockedURIFile)
+		}
+		ignoredBlockedURIs = trimEmptyAndComments(strings.Split(string(content), "\n"))
 	} else {
 		log.Debug("Using Filter list from internal list")
 	}
-	log.Debugf("Blocked URI List: %s", ignoredBlockedURIs)
-	log.Debugf("Listening on TCP Port: %s", strconv.Itoa(listenPort))
 
-	http.HandleFunc("/", handleViolationReport)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(listenPort)), nil))
+	log.Debugf("Blocked URI List: %s", ignoredBlockedURIs)
+	log.Debugf("Listening on TCP Port: %s", strconv.Itoa(*listenPort))
+
+	http.HandleFunc(*healthCheckPath, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
+
+	http.Handle("/", &violationReportHandler{
+		blockedURIs:                 ignoredBlockedURIs,
+		truncateQueryStringFragment: *truncateQueryStringFragment,
+
+		logClientIP:          *logClientIP,
+		logTruncatedClientIP: *logTruncatedClientIP,
+		metadataObject:       *metadataObject,
+	})
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), nil))
 }
 
-func handleViolationReport(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" && r.URL.Path == healthCheckPath {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
+type violationReportHandler struct {
+	truncateQueryStringFragment bool
+	blockedURIs                 []string
 
-	if r.Method != "POST" {
+	logClientIP          bool
+	logTruncatedClientIP bool
+	metadataObject       bool
+}
+
+func (vrh *violationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		log.WithFields(log.Fields{
 			"http_method": r.Method,
 		}).Debug("Received invalid HTTP method")
+
 		return
 	}
 
@@ -185,25 +202,36 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 	err := decoder.Decode(&report)
 	if err != nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		log.Debug(fmt.Sprintf("Unable to decode invalid JSON payload: %s", err))
+		log.Debugf("Unable to decode invalid JSON payload: %s", err)
 		return
 	}
 	defer r.Body.Close()
 
-	reportValidation := validateViolation(report)
+	reportValidation := vrh.validateViolation(report)
 	if reportValidation != nil {
 		http.Error(w, reportValidation.Error(), http.StatusBadRequest)
-		log.Debug(fmt.Sprintf("Received invalid payload: %s", reportValidation.Error()))
+		log.Debugf("Received invalid payload: %s", reportValidation.Error())
 		return
 	}
 
-	metadatas, gotMetadata := r.URL.Query()["metadata"]
-	var metadata string
-	if gotMetadata {
-		metadata = metadatas[0]
+	var metadata interface{}
+	if vrh.metadataObject {
+		metadataMap := make(map[string]string)
+		query := r.URL.Query()
+
+		for k, v := range query {
+			metadataMap[k] = v[0]
+		}
+
+		metadata = metadataMap
+	} else {
+		metadatas, gotMetadata := r.URL.Query()["metadata"]
+		if gotMetadata {
+			metadata = metadatas[0]
+		}
 	}
 
-	log.WithFields(log.Fields{
+	lf := log.Fields{
 		"document_uri":        report.Body.DocumentURI,
 		"referrer":            report.Body.Referrer,
 		"blocked_uri":         report.Body.BlockedURI,
@@ -214,11 +242,36 @@ func handleViolationReport(w http.ResponseWriter, r *http.Request) {
 		"script_sample":       report.Body.ScriptSample,
 		"status_code":         report.Body.StatusCode,
 		"metadata":            metadata,
-	}).Info()
+		"path":                r.URL.Path,
+	}
+
+	if vrh.truncateQueryStringFragment {
+		lf["document_uri"] = truncateQueryStringFragment(report.Body.DocumentURI)
+		lf["referrer"] = truncateQueryStringFragment(report.Body.Referrer)
+		lf["blocked_uri"] = truncateQueryStringFragment(report.Body.BlockedURI)
+	}
+
+	if vrh.logClientIP {
+		ip, err := getClientIP(r)
+		if err != nil {
+			log.Warnf("unable to parse client ip: %s", err)
+		}
+		lf["client_ip"] = ip.String()
+	}
+
+	if vrh.logTruncatedClientIP {
+		ip, err := getClientIP(r)
+		if err != nil {
+			log.Warnf("unable to parse client ip: %s", err)
+		}
+		lf["client_ip"] = truncateClientIP(ip)
+	}
+
+	log.WithFields(lf).Info()
 }
 
-func validateViolation(r CSPReport) error {
-	for _, value := range ignoredBlockedURIs {
+func (vrh *violationReportHandler) validateViolation(r CSPReport) error {
+	for _, value := range vrh.blockedURIs {
 		if strings.HasPrefix(r.Body.BlockedURI, value) {
 			err := fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
 			return err
@@ -230,4 +283,46 @@ func validateViolation(r CSPReport) error {
 	}
 
 	return nil
+}
+
+func truncateQueryStringFragment(uri string) string {
+	idx := strings.IndexAny(uri, "#?")
+	if idx != -1 {
+		return uri[:idx]
+	}
+
+	return uri
+}
+
+func truncateClientIP(addr netip.Addr) string {
+	// Ignoring the error is statically safe, as there are always enough bits.
+	if addr.Is4() {
+		p, _ := addr.Prefix(24)
+		return p.String()
+	}
+
+	if addr.Is6() {
+		p, _ := addr.Prefix(64)
+		return p.String()
+	}
+
+	return "unknown-address"
+}
+
+func getClientIP(r *http.Request) (netip.Addr, error) {
+	if s := r.Header.Get("X-Forwarded-For"); s != "" {
+		addr, err := netip.ParseAddr(s)
+		if err != nil {
+			return netip.Addr{}, fmt.Errorf("unable to parse address from X-Forwarded-For=%s: %w", s, err)
+		}
+
+		return addr, nil
+	}
+
+	addrp, err := netip.ParseAddrPort(r.RemoteAddr)
+	if err != nil {
+		return netip.Addr{}, fmt.Errorf("unable to parse remote address %s: %w", r.RemoteAddr, err)
+	}
+
+	return addrp.Addr(), nil
 }

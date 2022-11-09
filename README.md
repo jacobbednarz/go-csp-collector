@@ -41,6 +41,10 @@ $ CGO_ENABLED=0 go build csp_collector.go
 |port	|Port to run on, default 8080|
 |filter-file|Reads the blocked URI filter list from the specified file. Note one filter per line|
 |health-check-path|Sets path for health checkers to use, default \/_healthcheck|
+|log-client-ip|Include a field in the log with the IP delivering the report, or the value of the `X-Forwarded-For` header, if present.|
+|log-truncated-client-ip|Include a field in the log with the truncated IP (to /24 for IPv4, /64 for IPv6) delivering the report, or the value of the `X-Forwarded-For` header, if present. Conflicts with `log-client-ip`.
+|truncated-query-fragment|Remove all query strings and fragments (if set) from all URLs transmitted by the client|
+|query-params-metadata|Log all query parameters of the report URL as a map in the `metadata` field|
 
 
 See the sample.filterlist.txt file as an example of the filter list in a file
@@ -53,6 +57,11 @@ logged report.
 
 For example a report sent to `https://collector.example.com/?metadata=foobar`
 will include field `metadata` with value `foobar`.
+
+If `query-params-metadata` is set, instead all query parameters are logged as a
+map, e.g. `https://collector.example.com/?env=production&mode=enforce` will
+result in `"metadata": {"env": "production", "mode": "enforce"}` in JSON
+format, and `metadata="map[env:production mode:enforce]"` in default format.
 
 ### Output formats
 
