@@ -43,7 +43,7 @@ $ CGO_ENABLED=0 go build csp_collector.go
 |health-check-path|Sets path for health checkers to use, default \/_healthcheck|
 |log-client-ip|Include a field in the log with the IP delivering the report, or the value of the `X-Forwarded-For` header, if present.|
 |log-truncated-client-ip|Include a field in the log with the truncated IP (to /24 for IPv4, /64 for IPv6) delivering the report, or the value of the `X-Forwarded-For` header, if present. Conflicts with `log-client-ip`.
-|truncated-query-fragment|Remove all query strings and fragments (if set) from all URLs transmitted by the client|
+|truncate-query-fragment|Remove all query strings and fragments (if set) from all URLs transmitted by the client|
 |query-params-metadata|Log all query parameters of the report URL as a map in the `metadata` field|
 
 
