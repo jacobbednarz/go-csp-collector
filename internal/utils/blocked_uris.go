@@ -1,0 +1,28 @@
+package utils
+
+var DefaultIgnoredBlockedURIs = []string{
+	"resource://",
+	"chromenull://",
+	"chrome-extension://",
+	"safari-extension://",
+	"mxjscall://",
+	"webviewprogressproxy://",
+	"res://",
+	"mx://",
+	"safari-resource://",
+	"chromeinvoke://",
+	"chromeinvokeimmediate://",
+	"mbinit://",
+	"opera://",
+	"ms-appx://",
+	"ms-appx-web://",
+	"localhost",
+	"127.0.0.1",
+	"none://",
+	"about:blank",
+	"android-webview",
+	"ms-browser-extension",
+	"wvjbscheme://__wvjb_queue_message__",
+	"nativebaiduhd://adblock",
+	"bdvideo://error",
+}

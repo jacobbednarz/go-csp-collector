@@ -1,4 +1,18 @@
-## v0.0.10 (Unreleased)
+## v0.0.12 (Unreleased)
+
+- Shuffle internals around to add dedicated CSP endpoints and make way for NEL and reporting API.
+
+## v0.0.11
+
+**Improvements**
+
+- Add `log-client-ip` flag for logging client IP with requests
+- Add `log-truncated-client-ip` flag to use in conjunction with `log-client-ip` for logging only the IP range
+- Add `truncated-query-fragment` flag to remove all query strings and fragments (if set) from all URLs transmitted by the client
+- Add `query-params-metadata` flaf to log all query parameters of the report URL as a map in the `metadata` field
+- Bump to Go 1.19
+
+## v0.0.10
 
 **Improvements**
 
@@ -14,31 +28,31 @@
 
 - Filter MS application schemes ([#43](https://github.com/jacobbednarz/go-csp-collector/issues/43))
 
-## v0.0.8 
+## v0.0.8
 
 **Improvements**
 
 - Updated format of `-version` output to be `MAJOR.MINOR.PATCH+GIT_SHA` ([#42](https://github.com/jacobbednarz/go-csp-collector/issues/42))
 
-## v0.0.7 
+## v0.0.7
 
 **Improvements**
 
 - Allow metadata smuggling by appending `metadata` query parameter to reports ([#40](https://github.com/jacobbednarz/go-csp-collector/issues/40))
 
-## v0.0.6 
+## v0.0.6
 
 **Improvements**
 
 - Ignore document-uri values that don't start with `http` ([#39](https://github.com/jacobbednarz/go-csp-collector/issues/39))
 
-## v0.0.5 
+## v0.0.5
 
 **Improvements**
 
 - Adds ability to have comments in filter list file ([#37](https://github.com/jacobbednarz/go-csp-collector/issues/37))
 
-## v0.0.4 
+## v0.0.4
 
 **Improvements**
 
@@ -51,7 +65,7 @@
 - Docker support
 - More invalid URLs
 
-## v0.0.3 
+## v0.0.3
 
 **Improvements**
 
@@ -71,7 +85,7 @@
 - Don't panic for invalid payloads
 - Ensure we always have a timestamp
 
-## v0.0.2 
+## v0.0.2
 
 **Features**
 
@@ -79,4 +93,5 @@
 - add darwin builds
 
 **Improvements**
+
 - add goreleaser for packaging
