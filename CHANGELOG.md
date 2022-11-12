@@ -1,4 +1,6 @@
-## v0.0.12 (Unreleased)
+## v0.0.13 (Unreleased)
+
+## v0.0.12 
 
 - Shuffle internals around to add dedicated CSP endpoints and make way for NEL and reporting API.
 
