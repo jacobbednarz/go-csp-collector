@@ -98,7 +98,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc(*healthCheckPath, handler.HealthcheckHandler).Methods("GET")
 
-	cspHandler := &handler.CSPViolationReportHandler{
+	r.Handle("/csp/report-only", &handler.CSPViolationReportHandler{
 		BlockedURIs:                 ignoredBlockedURIs,
 		TruncateQueryStringFragment: *truncateQueryStringFragment,
 
@@ -106,14 +106,30 @@ func main() {
 		LogTruncatedClientIP: *logTruncatedClientIP,
 		MetadataObject:       *metadataObject,
 		Logger:               logger,
-	}
+		ReportOnly:           true,
+	}).Methods("POST")
 
-	reportOnlyCspHandler := cspHandler
-	reportOnlyCspHandler.ReportOnly = true
+	r.Handle("/csp", &handler.CSPViolationReportHandler{
+		BlockedURIs:                 ignoredBlockedURIs,
+		TruncateQueryStringFragment: *truncateQueryStringFragment,
 
-	r.Handle("/csp", cspHandler).Methods("POST")
-	r.Handle("/csp/report-only", reportOnlyCspHandler).Methods("POST")
-	r.Handle("/", cspHandler).Methods("POST")
+		LogClientIP:          *logClientIP,
+		LogTruncatedClientIP: *logTruncatedClientIP,
+		MetadataObject:       *metadataObject,
+		Logger:               logger,
+		ReportOnly:           false,
+	}).Methods("POST")
+
+	r.Handle("/", &handler.CSPViolationReportHandler{
+		BlockedURIs:                 ignoredBlockedURIs,
+		TruncateQueryStringFragment: *truncateQueryStringFragment,
+
+		LogClientIP:          *logClientIP,
+		LogTruncatedClientIP: *logTruncatedClientIP,
+		MetadataObject:       *metadataObject,
+		Logger:               logger,
+		ReportOnly:           false,
+	}).Methods("POST")
 
 	r.NotFoundHandler = r.NewRoute().HandlerFunc(http.NotFound).GetHandler()
 
