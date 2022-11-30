@@ -15,7 +15,7 @@ if [ -d build ]; then
 fi
 mkdir -p build
 
-platforms=("windows/amd64" "linux/amd64" "darwin/amd64")
+platforms=("windows/amd64" "linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64")
 
 echo "==> Build started for v${version}"
 
