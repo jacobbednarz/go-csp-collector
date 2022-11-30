@@ -4,7 +4,7 @@ WORKDIR /go/src/jacobbednarz/go-csp-collector
 RUN set -ex \
   && apk add --no-cache git \
   && go get -d ./... \
-  && go build csp_collector.go
+  && go build -o csp_collector main.go
 
 FROM alpine:3.16
 LABEL maintainer="https://github.com/jacobbednarz/go-csp-collector"
