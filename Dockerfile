@@ -6,7 +6,7 @@ RUN set -ex \
   && go get -d ./... \
   && go build -o csp_collector main.go
 
-FROM alpine:3.16
+FROM alpine:3.18
 LABEL maintainer="https://github.com/jacobbednarz/go-csp-collector"
 COPY --from=build /go/src/jacobbednarz/go-csp-collector/csp_collector /
 EXPOSE 8080
