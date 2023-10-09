@@ -1,3 +1,7 @@
+## v0.0.14 (Unreleased)
+
+- Bump to Go 1.21
+
 ## v0.0.13 (Unreleased)
 
 ## v0.0.12 

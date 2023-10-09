@@ -1,4 +1,4 @@
-FROM golang:1.19-alpine AS build
+FROM golang:1.21-alpine AS build
 COPY . /go/src/jacobbednarz/go-csp-collector
 WORKDIR /go/src/jacobbednarz/go-csp-collector
 RUN set -ex \
@@ -6,7 +6,7 @@ RUN set -ex \
   && go get -d ./... \
   && go build -o csp_collector main.go
 
-FROM alpine:3.16
+FROM alpine:3.18
 LABEL maintainer="https://github.com/jacobbednarz/go-csp-collector"
 COPY --from=build /go/src/jacobbednarz/go-csp-collector/csp_collector /
 EXPOSE 8080
