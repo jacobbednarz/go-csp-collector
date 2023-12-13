@@ -6,20 +6,35 @@ metadata:
     {{- include "csp-collector.labels" . | nindent 4 }}
     checksum/config: {{ include (print $.Template.BasePath "/configMap.yaml") . | sha256sum | trunc 63 }}
 spec:
+  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "csp-collector.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         checksum/config: {{ include (print $.Template.BasePath "/configMap.yaml") . | sha256sum | trunc 63 }}
       labels:
         {{- include "csp-collector.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "csp-collector.serviceAccountName" . }}
       containers:
         - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           volumeMounts:
           - name: config-volume
