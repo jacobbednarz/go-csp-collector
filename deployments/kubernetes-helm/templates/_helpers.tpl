@@ -48,3 +48,13 @@ app.kubernetes.io/name: {{ include "csp-collector.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
+{{/*
+Create the name of the service account to use
+*/}}
+{{- define "csp-collector.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "csp-collector.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
