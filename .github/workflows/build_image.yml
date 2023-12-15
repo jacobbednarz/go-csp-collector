@@ -1,12 +1,12 @@
-name: ci
+name: build-image
 
 on:
   push:
-    branches:
-      - "multi-arch-builds"
+    tags:
+      - "v*"
 
 env:
-  REGISTRY_IMAGE: schmitze333/go-csp-collector
+  REGISTRY_IMAGE: jacobbednarz/go-csp-collector
 
 jobs:
   build:
