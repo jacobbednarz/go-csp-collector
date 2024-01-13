@@ -227,3 +227,36 @@ func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateViolationWithSourceFile(t *testing.T) {
+	rawReport := []byte(`{
+		"csp-report": {
+			"document-uri": "https://example.com",
+			"blocked-uri": "https://google.com/example.css",
+			"column-number": 70774,
+			"line-number": 2,
+			"source-file": "https://example.com/example.js"
+		}
+	}`)
+
+	var report CSPReport
+	jsonErr := json.Unmarshal(rawReport, &report)
+	if jsonErr != nil {
+		t.Errorf("error: %s", jsonErr)
+	}
+
+	cspViolationHandler := &CSPViolationReportHandler{BlockedURIs: invalidBlockedURIs}
+	validateErr := cspViolationHandler.validateViolation(report)
+	if validateErr != nil {
+		t.Errorf("Unexpected error raised")
+	}
+	if report.Body.SourceFile == "" {
+		t.Errorf("Violation 'source-file' not found")
+	}
+	if report.Body.LineNumber == 0 {
+		t.Errorf("Violation 'line-number' not found")
+	}
+	if report.Body.ColumnNumber == 0 {
+		t.Errorf("Violation 'column-number' not found")
+	}
+}

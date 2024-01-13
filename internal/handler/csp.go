@@ -27,6 +27,9 @@ type CSPReportBody struct {
 	Disposition        string      `json:"disposition"`
 	ScriptSample       string      `json:"script-sample"`
 	StatusCode         interface{} `json:"status-code"`
+	SourceFile         string      `json:"source-file"`
+	LineNumber         uint32      `json:"line-number"`
+	ColumnNumber       uint32      `json:"column-number"`
 }
 
 type CSPViolationReportHandler struct {
@@ -94,6 +97,9 @@ func (vrh *CSPViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		"disposition":         report.Body.Disposition,
 		"script_sample":       report.Body.ScriptSample,
 		"status_code":         report.Body.StatusCode,
+		"source_file":         report.Body.SourceFile,
+		"line_number":         report.Body.LineNumber,
+		"column_number":       report.Body.ColumnNumber,
 		"metadata":            metadata,
 		"path":                r.URL.Path,
 	}
@@ -102,6 +108,7 @@ func (vrh *CSPViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		lf["document_uri"] = utils.TruncateQueryStringFragment(report.Body.DocumentURI)
 		lf["referrer"] = utils.TruncateQueryStringFragment(report.Body.Referrer)
 		lf["blocked_uri"] = utils.TruncateQueryStringFragment(report.Body.BlockedURI)
+		lf["source_file"] = utils.TruncateQueryStringFragment(report.Body.SourceFile)
 	}
 
 	if vrh.LogClientIP {
