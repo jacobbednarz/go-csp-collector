@@ -18,8 +18,8 @@ Alternatively, you can download the binaries from the [release page][2].
 ### Running
 
 ```sh
-$ go build main.go -p csp-collector
-$ ./csp-collector
+$ go build -o csp_collector main.go
+$ ./csp_collector
 ```
 
 ### Endpoints
@@ -34,7 +34,7 @@ You will either need to build within a docker container for the purpose, or use 
 to make the build compatible with alpine linux in a docker container.
 
 ```sh
-$ CGO_ENABLED=0 go build main.go -p csp-collector
+$ CGO_ENABLED=0 go build -o csp_collector main.go
 ```
 
 ### Command Line Options
@@ -89,7 +89,7 @@ If you'd rather have these violations end up in a file, I suggest just
 redirecting the output into a file like so:
 
 ```sh
-$ ./csp-collector 2>> /path/to/violations.log
+$ ./csp_collector 2>> /path/to/violations.log
 ```
 
 ### Visualisation
