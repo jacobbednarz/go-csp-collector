@@ -120,6 +120,17 @@ func main() {
 		ReportOnly:           false,
 	}).Methods("POST")
 
+	r.HandleFunc("/report/csp", handler.ReportAPICorsHandler).Methods("OPTIONS")
+	r.Handle("/report/csp", &handler.ReportAPIViolationReportHandler{
+		BlockedURIs:                 ignoredBlockedURIs,
+		TruncateQueryStringFragment: *truncateQueryStringFragment,
+
+		LogClientIP:          *logClientIP,
+		LogTruncatedClientIP: *logTruncatedClientIP,
+		MetadataObject:       *metadataObject,
+		Logger:               logger,
+	}).Methods("POST")
+
 	r.Handle("/", &handler.CSPViolationReportHandler{
 		BlockedURIs:                 ignoredBlockedURIs,
 		TruncateQueryStringFragment: *truncateQueryStringFragment,

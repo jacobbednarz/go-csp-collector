@@ -64,3 +64,10 @@ func GetClientIP(r *http.Request) (netip.Addr, error) {
 
 	return addrp.Addr(), nil
 }
+
+func Ternary(condition bool, trueValue, falseValue string) string {
+	if condition {
+		return trueValue
+	}
+	return falseValue
+}
