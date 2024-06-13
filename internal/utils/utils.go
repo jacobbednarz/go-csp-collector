@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	urlverifier "github.com/davidmytton/url-verifier"
 	"net/http"
 	"net/netip"
 	"strings"
@@ -70,4 +71,14 @@ func Ternary(condition bool, trueValue, falseValue string) string {
 		return trueValue
 	}
 	return falseValue
+}
+
+func ValidateOrigin(origin string) bool {
+	verifier := urlverifier.NewVerifier()
+	ret, err := verifier.Verify(origin)
+
+	if err != nil {
+		return false
+	}
+	return ret.IsRFC3986URL
 }
