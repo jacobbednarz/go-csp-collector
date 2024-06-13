@@ -120,8 +120,8 @@ func main() {
 		ReportOnly:           false,
 	}).Methods("POST")
 
-	r.HandleFunc("/report/csp", handler.ReportAPICorsHandler).Methods("OPTIONS")
-	r.Handle("/report/csp", &handler.ReportAPIViolationReportHandler{
+	r.HandleFunc("/reporting-api/csp", handler.ReportAPICorsHandler).Methods("OPTIONS")
+	r.Handle("/reporting-api/csp", &handler.ReportAPIViolationReportHandler{
 		BlockedURIs:                 ignoredBlockedURIs,
 		TruncateQueryStringFragment: *truncateQueryStringFragment,
 
