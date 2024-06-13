@@ -138,7 +138,6 @@ func (vrh *ReportAPIViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *
 
 		vrh.Logger.WithFields(lf).Info()
 	}
-
 }
 
 func (vrh *ReportAPIViolationReportHandler) validateViolation(r ReportAPIReports) error {
@@ -164,7 +163,7 @@ func ReportAPICorsHandler(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	method := r.Header.Get("Access-Control-Request-Method")
 	header := r.Header.Get("Access-Control-Request-Headers")
-	allow_origin := utils.Ternary(origin != "", origin, "*")
+	allow_origin := utils.Ternary(origin != "" && utils.ValidateOrigin(origin), origin, "*")
 	allow_method := utils.Ternary(method != "", method, "*")
 	allow_header := utils.Ternary(header != "", header, "*")
 	// Special handling due to bug in Chrome
@@ -177,7 +176,7 @@ func ReportAPICorsHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
 	w.Header().Set("Content-Type", "text/plain;charset=UTF-8")
-	w.Header().Set("Server", "cloudflare")
+	w.Header().Set("Server", "go-csp-collector")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+	_, _ = w.Write([]byte("OK"))
 }
