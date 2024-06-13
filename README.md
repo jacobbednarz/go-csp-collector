@@ -27,6 +27,8 @@ $ ./csp_collector
 - `POST /`: accepts a CSP violation report (recommended to use `/csp` for future proofing though).
 - `POST /csp`: accepts a CSP violation report.
 - `POST /csp/report-only`: same as `/csp` but appends a `report-only` attribute to the log line. Helpful if you have enforced and report only violations and wish to separate them.
+- `OPTIONS /reporting-api/csp`: CORS implementation for the Reporting-API.
+- `POST /reporting-api/csp`: Implementation of the new browser Reporting-API ([w3c](https://www.w3.org/TR/reporting-1/) / [MDN](https://developer.mozilla.org/en-US/docs/Web/API/Reporting_API)) - endpoint for CSP violations.
 
 #### Building for Docker
 

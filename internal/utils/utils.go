@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	urlverifier "github.com/davidmytton/url-verifier"
 	"net/http"
 	"net/netip"
 	"strings"
@@ -63,4 +64,21 @@ func GetClientIP(r *http.Request) (netip.Addr, error) {
 	}
 
 	return addrp.Addr(), nil
+}
+
+func Ternary(condition bool, trueValue, falseValue string) string {
+	if condition {
+		return trueValue
+	}
+	return falseValue
+}
+
+func ValidateOrigin(origin string) bool {
+	verifier := urlverifier.NewVerifier()
+	ret, err := verifier.Verify(origin)
+
+	if err != nil {
+		return false
+	}
+	return ret.IsRFC3986URL
 }
