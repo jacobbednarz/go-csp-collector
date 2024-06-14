@@ -42,6 +42,10 @@ jobs:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Set artifact identifier
+        run: |
+          platform=$(${{ matrix.platform }} | tr / -)
+          echo "artifact_identifier=$platform" >> "$GITHUB_ENV"
       - name: Export digest
         run: |
           mkdir -p /tmp/digests
@@ -50,7 +54,7 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digest-${{ matrix.platform }}
+          name: digest-$artifact_identifier
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
