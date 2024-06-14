@@ -45,7 +45,7 @@ jobs:
       - name: Set artifact identifier
         run: |
           platform=$(echo ${{ matrix.platform }} | tr / -)
-          echo "artifact_identifier=$platform" >> "$GITHUB_ENV"
+          echo "ARTIFACT_IDENTIFIER=$platform" >> "$GITHUB_ENV"
       - name: Export digest
         run: |
           mkdir -p /tmp/digests
@@ -54,7 +54,7 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: "digest-${artifact_identifier}"
+          name: "digest-${{ env.ARTIFACT_IDENTIFIER}}"
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
