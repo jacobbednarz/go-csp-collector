@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS build
+FROM golang:1.23-alpine AS build
 COPY . /go/src/jacobbednarz/go-csp-collector
 WORKDIR /go/src/jacobbednarz/go-csp-collector
 RUN set -ex \
