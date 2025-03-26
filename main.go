@@ -13,7 +13,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -28,10 +27,10 @@ var (
 
 	// Shared defaults for the logger output. This ensures that we are
 	// using the same keys for the `FieldKey` values across both formatters.
-	logFieldMapDefaults = log.FieldMap{
-		log.FieldKeyTime:  "timestamp",
-		log.FieldKeyLevel: "level",
-		log.FieldKeyMsg:   "message",
+	logFieldMapDefaults = logrus.FieldMap{
+		logrus.FieldKeyTime:  "timestamp",
+		logrus.FieldKeyLevel: "level",
+		logrus.FieldKeyMsg:   "message",
 	}
 )
 
@@ -39,7 +38,7 @@ var logger = logrus.New()
 
 func init() {
 	logger.SetOutput(os.Stdout)
-	logger.SetLevel(log.InfoLevel)
+	logger.SetLevel(logrus.InfoLevel)
 }
 
 func main() {
@@ -64,15 +63,15 @@ func main() {
 	}
 
 	if *debugFlag {
-		logger.SetLevel(log.DebugLevel)
+		logger.SetLevel(logrus.DebugLevel)
 	}
 
 	if *outputFormat == "json" {
-		logger.SetFormatter(&log.JSONFormatter{
+		logger.SetFormatter(&logrus.JSONFormatter{
 			FieldMap: logFieldMapDefaults,
 		})
 	} else {
-		logger.SetFormatter(&log.TextFormatter{
+		logger.SetFormatter(&logrus.TextFormatter{
 			FullTimestamp:          true,
 			DisableLevelTruncation: true,
 			QuoteEmptyFields:       true,
@@ -88,7 +87,7 @@ func main() {
 
 		content, err := os.ReadFile(*blockedURIFile)
 		if err != nil {
-			log.Fatalf("error reading Blocked File list: %s", *blockedURIFile)
+			logrus.Fatalf("error reading Blocked File list: %s", *blockedURIFile)
 		}
 		ignoredBlockedURIs = utils.TrimEmptyAndComments(strings.Split(string(content), "\n"))
 	} else {
