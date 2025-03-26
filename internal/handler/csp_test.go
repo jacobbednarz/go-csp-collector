@@ -42,7 +42,7 @@ var invalidBlockedURIs = []string{
 func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 	for _, blockedURI := range invalidBlockedURIs {
 		// Makes the test name more readable for the output.
-		testName := strings.Replace(blockedURI, "://", "", -1)
+		testName := strings.ReplaceAll(blockedURI, "://", "")
 
 		t.Run(testName, func(t *testing.T) {
 			rawReport := []byte(fmt.Sprintf(`{
