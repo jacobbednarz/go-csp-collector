@@ -119,6 +119,26 @@ func main() {
 		ReportOnly:           false,
 	}).Methods("POST")
 
+	r.Handle("/nel/report-only", &handler.NELViolationReportHandler{
+		TruncateQueryStringFragment: *truncateQueryStringFragment,
+
+		LogClientIP:          *logClientIP,
+		LogTruncatedClientIP: *logTruncatedClientIP,
+		MetadataObject:       *metadataObject,
+		Logger:               logger,
+		ReportOnly:           true,
+	}).Methods("POST")
+
+	r.Handle("/nel", &handler.NELViolationReportHandler{
+		TruncateQueryStringFragment: *truncateQueryStringFragment,
+
+		LogClientIP:          *logClientIP,
+		LogTruncatedClientIP: *logTruncatedClientIP,
+		MetadataObject:       *metadataObject,
+		Logger:               logger,
+		ReportOnly:           false,
+	}).Methods("POST")
+
 	r.HandleFunc("/reporting-api/csp", handler.ReportAPICorsHandler).Methods("OPTIONS")
 	r.Handle("/reporting-api/csp", &handler.ReportAPIViolationReportHandler{
 		BlockedURIs:                 ignoredBlockedURIs,

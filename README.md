@@ -1,4 +1,5 @@
-This is a content security policy violation collector written in Golang.
+This is a content security policy (CSP) violation and network error logging
+(NEL) collector written in Golang.
 
 It has been designed to listen on port 8080 and accept POST payloads
 containing the violation report. It captures the report and will write
@@ -24,11 +25,48 @@ $ ./csp_collector
 
 ### Endpoints
 
+#### CSP
+
 - `POST /`: accepts a CSP violation report (recommended to use `/csp` for future proofing though).
 - `POST /csp`: accepts a CSP violation report.
-- `POST /csp/report-only`: same as `/csp` but appends a `report-only` attribute to the log line. Helpful if you have enforced and report only violations and wish to separate them.
-- `OPTIONS /reporting-api/csp`: CORS implementation for the Reporting-API.
-- `POST /reporting-api/csp`: Implementation of the new browser Reporting-API ([w3c](https://www.w3.org/TR/reporting-1/) / [MDN](https://developer.mozilla.org/en-US/docs/Web/API/Reporting_API)) - endpoint for CSP violations.
+- `POST /csp/report-only`: same as `/csp` but appends a `report_only=true` attribute to the log line. Helpful if you have enforced and report-only violations and wish to separate them.
+- `OPTIONS /reporting-api/csp`: CORS preflight handler for the Reporting API.
+- `POST /reporting-api/csp`: Implementation of the browser Reporting API ([w3c](https://www.w3.org/TR/reporting-1/) / [MDN](https://developer.mozilla.org/en-US/docs/Web/API/Reporting_API)) for CSP violations.
+
+#### NEL (Network Error Logging)
+
+> [!IMPORTANT]  
+> Network error logging is still experimental in most browsers. This functionality is best effort and may need to adjust as the specification does.
+
+- `POST /nel`: accepts NEL reports for an enforced NEL policy.
+- `POST /nel/report-only`: same as `/nel` but appends a `report_only=true` attribute to the log line. Useful when testing a NEL policy before enforcing it.
+
+NEL reports are delivered by the browser via the [Reporting API](https://www.w3.org/TR/reporting-1/) as a JSON array. Each entry with `"type": "network-error"` is logged; other types in a mixed batch are silently skipped.
+
+To enable NEL reporting, send the `NEL` and `Report-To` (or `Reporting-Endpoints`) headers from your server:
+
+```http
+Reporting-Endpoints: nel-endpoint="https://collector.example.com/nel"
+NEL: {"report_to": "nel-endpoint", "max_age": 31536000}
+```
+
+Each logged NEL report includes the following fields:
+
+| Field               | Description                                              |
+| ------------------- | -------------------------------------------------------- |
+| `report_only`       | `true` when received on the `/nel/report-only` endpoint  |
+| `url`               | The URL of the request that failed                       |
+| `referrer`          | The referrer at the time of the request                  |
+| `type`              | Error type (e.g. `tcp.refused`, `dns.unreachable`, `ok`) |
+| `phase`             | Phase of the request: `dns`, `connection`, `application`, or `abandoned` |
+| `protocol`          | Network protocol (e.g. `h2`, `http/1.1`)                |
+| `method`            | HTTP method (e.g. `GET`, `POST`)                         |
+| `status_code`       | HTTP status code (0 if the connection never completed)   |
+| `elapsed_time`      | Duration of the request in milliseconds                  |
+| `server_ip`         | IP address of the server that handled the request        |
+| `sampling_fraction` | Fraction of matching requests that were reported         |
+| `metadata`          | Value of the `metadata` query parameter (if present)     |
+| `path`              | Path of the collector endpoint that received the report  |
 
 #### Building for Docker
 
@@ -71,7 +109,11 @@ format, and `metadata="map[env:production mode:enforce]"` in default format.
 
 ### `report-only` mode
 
-If you'd like to recieve report only violations on a different URL
+Both CSP and NEL have dedicated `report-only` endpoints (`/csp/report-only` and
+`/nel/report-only`). Reports received on these endpoints are logged identically
+to their enforced counterparts, but with `report_only=true` in the log output.
+This lets you distinguish enforced violations from report-only ones in your log
+aggregation tool without needing separate collector instances.
 
 ### Output formats
 
