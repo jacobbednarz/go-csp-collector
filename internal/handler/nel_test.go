@@ -33,7 +33,7 @@ func sampleNELReport(url string) []NELReport {
 	}
 }
 
-func newNELHandler(reportOnly bool) *NELViolationReportHandler {
+func newNELHandler(reportOnly bool) *NELViolationReportHandler { //nolint:unparam
 	l := logrus.New()
 	l.SetOutput(bytes.NewBuffer(nil))
 	return &NELViolationReportHandler{
