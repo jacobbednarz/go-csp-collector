@@ -1,6 +1,6 @@
 module github.com/jacobbednarz/go-csp-collector
 
-go 1.23.0
+go 1.26
 
 toolchain go1.23.4
 
