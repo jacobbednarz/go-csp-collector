@@ -2,7 +2,7 @@ module github.com/jacobbednarz/go-csp-collector
 
 go 1.26
 
-toolchain go1.23.4
+toolchain go1.26.1
 
 require (
 	github.com/davidmytton/url-verifier v1.0.1
