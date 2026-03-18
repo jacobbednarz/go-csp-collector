@@ -9,7 +9,7 @@ RUN set -ex \
 FROM alpine:3.23.3
 LABEL maintainer="https://github.com/jacobbednarz/go-csp-collector"
 COPY --from=build /go/src/jacobbednarz/go-csp-collector/csp_collector /
-EXPOSE 8080
+EXPOSE 8080 9090
 
 RUN mkdir -p /home/csp_collector && \
     addgroup -Sg 1000 csp_collector &&  \

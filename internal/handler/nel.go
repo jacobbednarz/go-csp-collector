@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 	log "github.com/sirupsen/logrus"
 )
@@ -42,7 +43,8 @@ type NELViolationReportHandler struct {
 	LogTruncatedClientIP bool
 	MetadataObject       bool
 
-	Logger *log.Logger
+	Logger  *log.Logger
+	Metrics *metrics.Metrics
 }
 
 func (h *NELViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +58,9 @@ func (h *NELViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 
 	err := decoder.Decode(&reports)
 	if err != nil {
+		if h.Metrics != nil {
+			h.Metrics.ReportErrors.WithLabelValues("nel", "decode_error").Inc()
+		}
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		h.Logger.Debugf("unable to decode invalid JSON payload: %s", err)
 		return
@@ -64,6 +69,9 @@ func (h *NELViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	defer r.Body.Close()
 
 	if err := h.validateReports(reports); err != nil {
+		if h.Metrics != nil {
+			h.Metrics.ReportErrors.WithLabelValues("nel", "validation_error").Inc()
+		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		h.Logger.Debugf("received invalid payload: %s", err.Error())
 		return
@@ -84,6 +92,9 @@ func (h *NELViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 
 	for _, report := range reports {
 		if report.Type != "network-error" {
+			if h.Metrics != nil {
+				h.Metrics.ReportIgnored.WithLabelValues("nel", "unsupported_type").Inc()
+			}
 			continue
 		}
 
@@ -129,6 +140,13 @@ func (h *NELViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		}
 
 		h.Logger.WithFields(lf).Info()
+		if h.Metrics != nil {
+			mode := "enforced"
+			if h.ReportOnly {
+				mode = "report_only"
+			}
+			h.Metrics.NELReports.WithLabelValues(mode).Inc()
+		}
 	}
 }
 

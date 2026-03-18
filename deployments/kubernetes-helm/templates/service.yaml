@@ -15,5 +15,11 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+    {{- if and .Values.metrics.enabled .Values.service.metrics.enabled }}
+    - port: {{ .Values.service.metrics.port }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+    {{- end }}
   selector:
     {{- include "csp-collector.selectorLabels" . | nindent 4 }}

@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/sirupsen/logrus"
 )
 
@@ -356,6 +359,78 @@ func TestValidateViolationWithBlockedDomain(t *testing.T) {
 				t.Errorf("expected no error but got: %v", err)
 			}
 		})
+	}
+}
+
+func TestCSPHandlerMetricsSuccess(t *testing.T) {
+	payload := []byte(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/app.js"}}`)
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := &CSPViolationReportHandler{
+		Logger:  l,
+		Metrics: m,
+	}
+
+	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.Reports.WithLabelValues("csp", "enforced")); got != 1 {
+		t.Fatalf("reports_total = %v, want 1", got)
+	}
+}
+
+func TestCSPHandlerMetricsDecodeError(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := &CSPViolationReportHandler{
+		Logger:  l,
+		Metrics: m,
+	}
+
+	req := httptest.NewRequest("POST", "/csp", strings.NewReader("bad-json"))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("csp", "decode_error")); got != 1 {
+		t.Fatalf("reports_errors_total decode_error = %v, want 1", got)
+	}
+}
+
+func TestCSPHandlerMetricsFilteredDomain(t *testing.T) {
+	payload := []byte(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://ads.example-tracker.com/asset.js"}}`)
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := &CSPViolationReportHandler{
+		Logger:         l,
+		Metrics:        m,
+		BlockedDomains: []string{"example-tracker.com"},
+	}
+
+	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.ReportFiltered.WithLabelValues("csp", "blocked_domain")); got != 1 {
+		t.Fatalf("reports_filtered_total blocked_domain = %v, want 1", got)
 	}
 }
 
