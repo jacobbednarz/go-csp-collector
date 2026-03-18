@@ -14,6 +14,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+var blockedDomains = []string{
+	"kaspersky-labs.com",
+	"example-tracker.com",
+	"ads.example.net",
+}
+
 var invalidBlockedURIs = []string{
 	"resource://",
 	"chromenull://",
@@ -258,5 +264,181 @@ func TestValidateViolationWithSourceFile(t *testing.T) {
 	}
 	if report.Body.ColumnNumber == 0 {
 		t.Errorf("Violation 'column-number' not found")
+	}
+}
+
+func TestIsBlockedByDomain(t *testing.T) {
+	domains := []string{"kaspersky-labs.com", "example-tracker.com"}
+
+	cases := []struct {
+		blockedURI string
+		want       bool
+	}{
+		// Exact domain match.
+		{"https://kaspersky-labs.com/script.js", true},
+		// Single subdomain.
+		{"https://gc.kis.v2.scr.kaspersky-labs.com/foo", true},
+		// Deeply nested subdomain.
+		{"https://a.b.c.kaspersky-labs.com/bar", true},
+		// Different domain entirely — must not block.
+		{"https://example.com/script.js", false},
+		// Domain that only shares a suffix but is not a subdomain — must not block.
+		{"https://evilkaspersky-labs.com/x", false},
+		// Non-URL blocked-uri values common in CSP reports — must not block.
+		{"about:blank", false},
+		{"resource://", false},
+		{"chrome-extension://abc", false},
+		// Empty domain list edge case handled separately in TestIsBlockedByDomainEmptyList.
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.blockedURI, func(t *testing.T) {
+			got := isBlockedByDomain(tc.blockedURI, domains)
+			if got != tc.want {
+				t.Errorf("isBlockedByDomain(%q) = %v, want %v", tc.blockedURI, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsBlockedByDomainEmptyList(t *testing.T) {
+	if isBlockedByDomain("https://example.com/foo", []string{}) {
+		t.Error("expected false for empty domain list")
+	}
+	if isBlockedByDomain("https://example.com/foo", nil) {
+		t.Error("expected false for nil domain list")
+	}
+}
+
+func TestValidateViolationWithBlockedDomain(t *testing.T) {
+	cases := []struct {
+		name       string
+		blockedURI string
+		wantErr    bool
+	}{
+		{
+			name:       "exact domain is blocked",
+			blockedURI: "https://kaspersky-labs.com/script.js",
+			wantErr:    true,
+		},
+		{
+			name:       "subdomain is blocked",
+			blockedURI: "https://gc.kis.v2.scr.kaspersky-labs.com/foo",
+			wantErr:    true,
+		},
+		{
+			name:       "unrelated domain is allowed",
+			blockedURI: "https://legitimate.example.com/style.css",
+			wantErr:    false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rawReport := fmt.Sprintf(`{
+				"csp-report": {
+					"document-uri": "https://example.com",
+					"blocked-uri": "%s"
+				}
+			}`, tc.blockedURI)
+
+			var report CSPReport
+			if err := json.Unmarshal([]byte(rawReport), &report); err != nil {
+				t.Fatalf("failed to unmarshal test report: %v", err)
+			}
+
+			handler := &CSPViolationReportHandler{BlockedDomains: blockedDomains}
+			err := handler.validateViolation(report)
+			if tc.wantErr && err == nil {
+				t.Error("expected an error but got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("expected no error but got: %v", err)
+			}
+		})
+	}
+}
+
+// The benchmarks below compare the two filter implementations under equivalent
+// conditions: a 5-entry list where the matching entry is last (worst-case scan)
+// and a no-match case (full scan).
+
+// BenchmarkBlockedURIsMatch measures prefix filtering when the URI matches the
+// last entry in the list.
+func BenchmarkBlockedURIsMatch(b *testing.B) {
+	prefixes := []string{
+		"resource://",
+		"chrome-extension://",
+		"safari-extension://",
+		"localhost",
+		"about:blank",
+	}
+	uri := "about:blank"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, p := range prefixes {
+			if strings.HasPrefix(uri, p) {
+				break
+			}
+		}
+	}
+}
+
+// BenchmarkBlockedURIsNoMatch measures prefix filtering when nothing in the
+// list matches, forcing a full scan.
+func BenchmarkBlockedURIsNoMatch(b *testing.B) {
+	prefixes := []string{
+		"resource://",
+		"chrome-extension://",
+		"safari-extension://",
+		"localhost",
+		"about:blank",
+	}
+	uri := "https://legitimate.example.com/some/path"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, p := range prefixes {
+			if strings.HasPrefix(uri, p) {
+				break
+			}
+		}
+	}
+}
+
+// BenchmarkBlockedDomainsMatch measures domain filtering when the hostname
+// matches the last entry in the list.
+func BenchmarkBlockedDomainsMatch(b *testing.B) {
+	domains := []string{
+		"google-analytics.com",
+		"facebook.net",
+		"doubleclick.net",
+		"ads.twitter.com",
+		"kaspersky-labs.com",
+	}
+	uri := "https://gc.kis.v2.scr.kaspersky-labs.com/some/path"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		isBlockedByDomain(uri, domains)
+	}
+}
+
+// BenchmarkBlockedDomainsNoMatch measures domain filtering when nothing in
+// the list matches, forcing a full scan.
+func BenchmarkBlockedDomainsNoMatch(b *testing.B) {
+	domains := []string{
+		"google-analytics.com",
+		"facebook.net",
+		"doubleclick.net",
+		"ads.twitter.com",
+		"kaspersky-labs.com",
+	}
+	uri := "https://legitimate.example.com/some/path"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		isBlockedByDomain(uri, domains)
 	}
 }

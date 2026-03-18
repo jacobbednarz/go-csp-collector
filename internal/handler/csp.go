@@ -4,11 +4,35 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 	log "github.com/sirupsen/logrus"
 )
+
+// isBlockedByDomain returns true when the hostname of blockedURI exactly
+// matches domain or is a subdomain of domain (e.g. "foo.example.com" matches
+// "example.com"). The check is an exact suffix comparison, not fuzzy matching.
+func isBlockedByDomain(blockedURI string, domains []string) bool {
+	if len(domains) == 0 {
+		return false
+	}
+
+	u, err := url.Parse(blockedURI)
+	if err != nil || u.Host == "" {
+		return false
+	}
+
+	host := u.Hostname()
+	for _, domain := range domains {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return true
+		}
+	}
+
+	return false
+}
 
 // CSPReport is the structure of the HTTP payload the system receives.
 type CSPReport struct {
@@ -36,6 +60,7 @@ type CSPViolationReportHandler struct {
 	ReportOnly                  bool
 	TruncateQueryStringFragment bool
 	BlockedURIs                 []string
+	BlockedDomains              []string
 
 	LogClientIP          bool
 	LogTruncatedClientIP bool
@@ -133,9 +158,12 @@ func (vrh *CSPViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 func (vrh *CSPViolationReportHandler) validateViolation(r CSPReport) error {
 	for _, value := range vrh.BlockedURIs {
 		if strings.HasPrefix(r.Body.BlockedURI, value) {
-			err := fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
-			return err
+			return fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
 		}
+	}
+
+	if isBlockedByDomain(r.Body.BlockedURI, vrh.BlockedDomains) {
+		return fmt.Errorf("blocked URI ('%s') is an invalid resource", r.Body.BlockedURI)
 	}
 
 	if !strings.HasPrefix(r.Body.DocumentURI, "http") {

@@ -40,6 +40,7 @@ type ReportAPIViolation struct {
 type ReportAPIViolationReportHandler struct {
 	TruncateQueryStringFragment bool
 	BlockedURIs                 []string
+	BlockedDomains              []string
 
 	LogClientIP          bool
 	LogTruncatedClientIP bool
@@ -143,13 +144,15 @@ func (vrh *ReportAPIViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *
 func (vrh *ReportAPIViolationReportHandler) validateViolation(r ReportAPIReports) error {
 	for _, violation := range r.Reports {
 		if violation.Type != "csp-violation" {
-			continue // Skip the rest of the loop and move to the next iteration
+			continue
 		}
 		for _, value := range vrh.BlockedURIs {
 			if strings.HasPrefix(violation.Body.BlockedURL, value) {
-				err := fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
-				return err
+				return fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
 			}
+		}
+		if isBlockedByDomain(violation.Body.BlockedURL, vrh.BlockedDomains) {
+			return fmt.Errorf("blocked URI ('%s') is an invalid resource", violation.Body.BlockedURL)
 		}
 		if !strings.HasPrefix(violation.Body.DocumentURL, "http") {
 			return fmt.Errorf("document URI ('%s') is invalid", violation.Body.DocumentURL)
