@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 	log "github.com/sirupsen/logrus"
 )
@@ -66,7 +67,8 @@ type CSPViolationReportHandler struct {
 	LogTruncatedClientIP bool
 	MetadataObject       bool
 
-	Logger *log.Logger
+	Logger  *log.Logger
+	Metrics *metrics.Metrics
 }
 
 func (vrh *CSPViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +82,9 @@ func (vrh *CSPViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 
 	err := decoder.Decode(&report)
 	if err != nil {
+		if vrh.Metrics != nil {
+			vrh.Metrics.ReportErrors.WithLabelValues("csp", "decode_error").Inc()
+		}
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		vrh.Logger.Debugf("unable to decode invalid JSON payload: %s", err)
 		return
@@ -87,8 +92,31 @@ func (vrh *CSPViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 
 	defer r.Body.Close()
 
+	for _, value := range vrh.BlockedURIs {
+		if strings.HasPrefix(report.Body.BlockedURI, value) {
+			if vrh.Metrics != nil {
+				vrh.Metrics.ReportFiltered.WithLabelValues("csp", "blocked_uri").Inc()
+			}
+			http.Error(w, fmt.Sprintf("blocked URI ('%s') is an invalid resource", value), http.StatusBadRequest)
+			vrh.Logger.Debugf("received invalid payload: blocked URI ('%s') is an invalid resource", value)
+			return
+		}
+	}
+
+	if isBlockedByDomain(report.Body.BlockedURI, vrh.BlockedDomains) {
+		if vrh.Metrics != nil {
+			vrh.Metrics.ReportFiltered.WithLabelValues("csp", "blocked_domain").Inc()
+		}
+		http.Error(w, fmt.Sprintf("blocked URI ('%s') is an invalid resource", report.Body.BlockedURI), http.StatusBadRequest)
+		vrh.Logger.Debugf("received invalid payload: blocked URI ('%s') is an invalid resource", report.Body.BlockedURI)
+		return
+	}
+
 	reportValidation := vrh.validateViolation(report)
 	if reportValidation != nil {
+		if vrh.Metrics != nil {
+			vrh.Metrics.ReportErrors.WithLabelValues("csp", "validation_error").Inc()
+		}
 		http.Error(w, reportValidation.Error(), http.StatusBadRequest)
 		vrh.Logger.Debugf("received invalid payload: %s", reportValidation.Error())
 		return
@@ -153,6 +181,13 @@ func (vrh *CSPViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 	}
 
 	vrh.Logger.WithFields(lf).Info()
+	if vrh.Metrics != nil {
+		mode := "enforced"
+		if vrh.ReportOnly {
+			mode = "report_only"
+		}
+		vrh.Metrics.Reports.WithLabelValues("csp", mode).Inc()
+	}
 }
 
 func (vrh *CSPViolationReportHandler) validateViolation(r CSPReport) error {

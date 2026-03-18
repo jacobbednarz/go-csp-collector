@@ -9,9 +9,12 @@ import (
 	"strings"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/handler"
+	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 )
 
@@ -48,6 +51,8 @@ func main() {
 	blockedURIFile := flag.String("filter-file", "", "Blocked URI filter file (one prefix per line)")
 	blockedDomainFile := flag.String("filter-domains-file", "", "Blocked domain filter file (one domain per line; blocks exact matches and all subdomains)")
 	listenPort := flag.Int("port", 8080, "Port to listen on")
+	metricsPort := flag.Int("metrics-port", 9090, "Port for the Prometheus metrics endpoint")
+	metricsBindAddr := flag.String("metrics-bind-addr", "127.0.0.1", "Bind address for the Prometheus metrics endpoint")
 	healthCheckPath := flag.String("health-check-path", defaultHealthCheckPath, "Health checker path")
 	truncateQueryStringFragment := flag.Bool("truncate-query-fragment", false, "Truncate query string and fragment from document-uri, referrer and blocked-uri before logging (to reduce chances of accidentally logging sensitive data)")
 
@@ -108,8 +113,18 @@ func main() {
 
 	r := mux.NewRouter()
 	r.HandleFunc(*healthCheckPath, handler.HealthcheckHandler).Methods("GET")
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
 
-	r.Handle("/csp/report-only", &handler.CSPViolationReportHandler{
+	wrapWithPrometheus := func(handlerName string, route string, h http.Handler) http.Handler {
+		labels := prometheus.Labels{"handler": handlerName, "route": route}
+		return promhttp.InstrumentHandlerDuration(
+			m.RequestDuration.MustCurryWith(labels),
+			promhttp.InstrumentHandlerInFlight(m.RequestsInFlight.With(labels), h),
+		)
+	}
+
+	r.Handle("/csp/report-only", wrapWithPrometheus("csp", "/csp/report-only", &handler.CSPViolationReportHandler{
 		BlockedURIs:                 ignoredBlockedURIs,
 		BlockedDomains:              blockedDomains,
 		TruncateQueryStringFragment: *truncateQueryStringFragment,
@@ -119,9 +134,10 @@ func main() {
 		MetadataObject:       *metadataObject,
 		Logger:               logger,
 		ReportOnly:           true,
-	}).Methods("POST")
+		Metrics:              m,
+	})).Methods("POST")
 
-	r.Handle("/csp", &handler.CSPViolationReportHandler{
+	r.Handle("/csp", wrapWithPrometheus("csp", "/csp", &handler.CSPViolationReportHandler{
 		BlockedURIs:                 ignoredBlockedURIs,
 		BlockedDomains:              blockedDomains,
 		TruncateQueryStringFragment: *truncateQueryStringFragment,
@@ -131,9 +147,10 @@ func main() {
 		MetadataObject:       *metadataObject,
 		Logger:               logger,
 		ReportOnly:           false,
-	}).Methods("POST")
+		Metrics:              m,
+	})).Methods("POST")
 
-	r.Handle("/nel/report-only", &handler.NELViolationReportHandler{
+	r.Handle("/nel/report-only", wrapWithPrometheus("nel", "/nel/report-only", &handler.NELViolationReportHandler{
 		TruncateQueryStringFragment: *truncateQueryStringFragment,
 
 		LogClientIP:          *logClientIP,
@@ -141,9 +158,10 @@ func main() {
 		MetadataObject:       *metadataObject,
 		Logger:               logger,
 		ReportOnly:           true,
-	}).Methods("POST")
+		Metrics:              m,
+	})).Methods("POST")
 
-	r.Handle("/nel", &handler.NELViolationReportHandler{
+	r.Handle("/nel", wrapWithPrometheus("nel", "/nel", &handler.NELViolationReportHandler{
 		TruncateQueryStringFragment: *truncateQueryStringFragment,
 
 		LogClientIP:          *logClientIP,
@@ -151,10 +169,11 @@ func main() {
 		MetadataObject:       *metadataObject,
 		Logger:               logger,
 		ReportOnly:           false,
-	}).Methods("POST")
+		Metrics:              m,
+	})).Methods("POST")
 
 	r.HandleFunc("/reporting-api/csp", handler.ReportAPICorsHandler).Methods("OPTIONS")
-	r.Handle("/reporting-api/csp", &handler.ReportAPIViolationReportHandler{
+	r.Handle("/reporting-api/csp", wrapWithPrometheus("reporting_api_csp", "/reporting-api/csp", &handler.ReportAPIViolationReportHandler{
 		BlockedURIs:                 ignoredBlockedURIs,
 		BlockedDomains:              blockedDomains,
 		TruncateQueryStringFragment: *truncateQueryStringFragment,
@@ -163,9 +182,10 @@ func main() {
 		LogTruncatedClientIP: *logTruncatedClientIP,
 		MetadataObject:       *metadataObject,
 		Logger:               logger,
-	}).Methods("POST")
+		Metrics:              m,
+	})).Methods("POST")
 
-	r.Handle("/", &handler.CSPViolationReportHandler{
+	r.Handle("/", wrapWithPrometheus("csp", "/", &handler.CSPViolationReportHandler{
 		BlockedURIs:                 ignoredBlockedURIs,
 		BlockedDomains:              blockedDomains,
 		TruncateQueryStringFragment: *truncateQueryStringFragment,
@@ -175,13 +195,22 @@ func main() {
 		MetadataObject:       *metadataObject,
 		Logger:               logger,
 		ReportOnly:           false,
-	}).Methods("POST")
+		Metrics:              m,
+	})).Methods("POST")
 
 	r.NotFoundHandler = r.NewRoute().HandlerFunc(http.NotFound).GetHandler()
 
 	logger.Debugf("blocked URI list: %s", ignoredBlockedURIs)
 	logger.Debugf("blocked domain list: %s", blockedDomains)
 	logger.Debugf("listening on TCP port: %s", strconv.Itoa(*listenPort))
+	logger.Debugf("metrics endpoint listening on %s:%d", *metricsBindAddr, *metricsPort)
+
+	go func() {
+		metricsMux := http.NewServeMux()
+		metricsMux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+		metricsAddress := fmt.Sprintf("%s:%d", *metricsBindAddr, *metricsPort)
+		logger.Fatal(http.ListenAndServe(metricsAddress, metricsMux))
+	}()
 
 	logger.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), r))
 }

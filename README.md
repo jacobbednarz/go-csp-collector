@@ -84,6 +84,8 @@ $ CGO_ENABLED=0 go build -o csp_collector main.go
 | version                 | Shows the version string before exiting                                                                                                                                                           |
 | debug                   | Runs in debug mode producing more verbose output                                                                                                                                                  |
 | port                    | Port to run on, default 8080                                                                                                                                                                      |
+| metrics-port            | Port for the Prometheus metrics endpoint, default 9090                                                                                                                                            |
+| metrics-bind-addr       | Bind address for the Prometheus metrics endpoint, default 127.0.0.1                                                                                                                               |
 | filter-file             | Reads the blocked URI filter list from the specified file. Each line is matched as a prefix against the blocked URI. Note one filter per line.                                                    |
 | filter-domains-file     | Reads a domain block list from the specified file. Each line is a bare domain (e.g. `kaspersky-labs.com`). A report is dropped when the blocked URI's hostname exactly matches the domain or is any subdomain of it (e.g. `gc.kis.v2.scr.kaspersky-labs.com`). Matching uses exact suffix comparison — no fuzzy or regex logic. Note one domain per line. **Performance note:** each check requires a `url.Parse` call to extract the hostname, which costs roughly 20–35× more than the prefix filter (~180 ns/op vs ~5–8 ns/op). For high-throughput deployments, prefer `filter-file` for simple prefix matches and only use `filter-domains-file` where subdomain wildcard matching is genuinely needed. |
 | health-check-path       | Sets path for health checkers to use, default \/\_healthcheck                                                                                                                                     |
@@ -116,6 +118,38 @@ Both CSP and NEL have dedicated `report-only` endpoints (`/csp/report-only` and
 to their enforced counterparts, but with `report_only=true` in the log output.
 This lets you distinguish enforced violations from report-only ones in your log
 aggregation tool without needing separate collector instances.
+
+### Metrics
+
+Prometheus metrics are exposed on a dedicated endpoint:
+
+- Address: `127.0.0.1:9090` (default)
+- Path: `/metrics`
+- Full URL: `http://127.0.0.1:9090/metrics`
+
+The collector exports:
+
+| Metric | Type | Labels | Description |
+| ------ | ---- | ------ | ----------- |
+| `csp_collector_reports_total` | Counter | `handler`, `mode` | Successfully processed CSP or Reporting API reports |
+| `csp_collector_nel_reports_total` | Counter | `mode` | Successfully processed NEL reports |
+| `csp_collector_reports_filtered_total` | Counter | `handler`, `reason` | Reports dropped by URI/domain filters |
+| `csp_collector_reports_ignored_total` | Counter | `handler`, `reason` | Reports intentionally ignored (for example unsupported NEL types) |
+| `csp_collector_reports_errors_total` | Counter | `handler`, `type` | Rejected reports (decode or validation failures) |
+| `csp_collector_http_request_duration_seconds` | Histogram | `handler`, `route`, `method`, `code` | HTTP request duration for report-ingestion endpoints |
+| `csp_collector_http_requests_in_flight` | Gauge | `handler`, `route` | Active in-flight report-ingestion requests |
+| `go_*` / `process_*` | Various | client-go defaults | Runtime and process health metrics |
+
+Example Prometheus scrape config:
+
+```yaml
+scrape_configs:
+  - job_name: "go-csp-collector"
+    static_configs:
+      - targets: ["127.0.0.1:9090"]
+```
+
+If you expose metrics on a non-localhost interface using `--metrics-bind-addr`, protect access with network controls (firewall rules, private network, or service mesh policy).
 
 ### Output formats
 

@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/sirupsen/logrus"
 )
 
@@ -290,5 +293,53 @@ func TestNELHandlerTruncateQueryStringFragment(t *testing.T) {
 	}
 	if !strings.Contains(out, "example.com/page") {
 		t.Errorf("expected base URL in log output, got: %s", out)
+	}
+}
+
+func TestNELHandlerMetricsSuccessAndIgnored(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := &NELViolationReportHandler{Logger: l, Metrics: m}
+	reports := []NELReport{
+		{Type: "network-error", URL: "https://example.com/ok", Body: NELReportBody{Type: "tcp.refused", Phase: "connection"}},
+		{Type: "csp-violation", URL: "https://example.com/skip"},
+	}
+
+	payload, _ := json.Marshal(reports)
+	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.NELReports.WithLabelValues("enforced")); got != 1 {
+		t.Fatalf("nel_reports_total enforced = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(m.ReportIgnored.WithLabelValues("nel", "unsupported_type")); got != 1 {
+		t.Fatalf("reports_ignored_total = %v, want 1", got)
+	}
+}
+
+func TestNELHandlerMetricsValidationError(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := &NELViolationReportHandler{Logger: l, Metrics: m}
+	payload, _ := json.Marshal(sampleNELReport("about:blank"))
+	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("nel", "validation_error")); got != 1 {
+		t.Fatalf("reports_errors_total validation_error = %v, want 1", got)
 	}
 }

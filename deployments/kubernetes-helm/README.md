@@ -46,8 +46,15 @@ ingress:
 | `ingress.tls.secretName`    | Name of the secret to use                 | Not Set                                                 |
 | `ingress.tls.hosts`         | List of FQDN's the above secret is associated with| Not Set                                         |
 | `service.type`              | Service type                              | `ClusterIP`                                             |
-| `service.port`              | Service port                              | `80`                                                    |
+| `service.port`              | Service port                              | `8080`                                                  |
+| `service.metrics.enabled`   | Exposes the metrics port on the Service   | `false`                                                 |
+| `service.metrics.port`      | Service port for Prometheus metrics       | `9090`                                                  |
 | `service.annotations`       | Service annotations                       | `{}`                                                    |
+| `metrics.enabled`           | Enables the dedicated metrics listener    | `true`                                                  |
+| `metrics.bindAddress`       | Bind address for the metrics listener     | `0.0.0.0`                                               |
+| `metrics.port`              | Container port for Prometheus metrics     | `9090`                                                  |
+| `metrics.path`              | Metrics endpoint path                     | `/metrics`                                              |
+| `metrics.podAnnotations`    | Pod annotations for Prometheus scraping   | `prometheus.io/*` defaults                              |
 | `custom`                    | CLI Param Options (see Below)             |                                                         |
 | `custom.debug`              | Logs in debug mode                        | `false`                                                 |
 | `custom.filterlist`         | Name of file within the configMaps dir for custom filters| `false` Uses list compiled into the app  |

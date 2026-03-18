@@ -18,6 +18,14 @@ spec:
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+        {{- if .Values.metrics.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/path: {{ .Values.metrics.path | quote }}
+        prometheus.io/port: {{ .Values.metrics.port | quote }}
+        {{- with .Values.metrics.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- end }}
         checksum/config: {{ include (print $.Template.BasePath "/configMap.yaml") . | sha256sum | trunc 63 }}
       labels:
         {{- include "csp-collector.selectorLabels" . | nindent 8 }}
@@ -52,10 +60,21 @@ spec:
           {{- if .Values.custom.debug }}
             - "--debug"
           {{- end }}
+          {{- if .Values.metrics.enabled }}
+            - "--metrics-bind-addr"
+            - {{ .Values.metrics.bindAddress | quote }}
+            - "--metrics-port"
+            - {{ .Values.metrics.port | quote }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 8080
               protocol: TCP
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /_healthcheck

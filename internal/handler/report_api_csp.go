@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 	log "github.com/sirupsen/logrus"
 )
@@ -46,7 +47,8 @@ type ReportAPIViolationReportHandler struct {
 	LogTruncatedClientIP bool
 	MetadataObject       bool
 
-	Logger *log.Logger
+	Logger  *log.Logger
+	Metrics *metrics.Metrics
 }
 
 func (vrh *ReportAPIViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -60,6 +62,9 @@ func (vrh *ReportAPIViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *
 
 	err := decoder.Decode(&reports_raw)
 	if err != nil {
+		if vrh.Metrics != nil {
+			vrh.Metrics.ReportErrors.WithLabelValues("reporting_api_csp", "decode_error").Inc()
+		}
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		vrh.Logger.Debugf("unable to decode invalid JSON payload: %s", err)
 		return
@@ -71,8 +76,18 @@ func (vrh *ReportAPIViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *
 		Reports: reports_raw,
 	}
 
-	reportValidation := vrh.validateViolation(reports)
+	failureClass, reportValidation := vrh.validateViolationWithReason(reports)
 	if reportValidation != nil {
+		if vrh.Metrics != nil {
+			switch failureClass {
+			case "blocked_uri":
+				vrh.Metrics.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_uri").Inc()
+			case "blocked_domain":
+				vrh.Metrics.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_domain").Inc()
+			default:
+				vrh.Metrics.ReportErrors.WithLabelValues("reporting_api_csp", "validation_error").Inc()
+			}
+		}
 		http.Error(w, reportValidation.Error(), http.StatusBadRequest)
 		vrh.Logger.Debugf("received invalid payload: %s", reportValidation.Error())
 		return
@@ -138,28 +153,40 @@ func (vrh *ReportAPIViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *
 		}
 
 		vrh.Logger.WithFields(lf).Info()
+		if vrh.Metrics != nil {
+			mode := "enforced"
+			if report_only {
+				mode = "report_only"
+			}
+			vrh.Metrics.Reports.WithLabelValues("reporting_api_csp", mode).Inc()
+		}
 	}
 }
 
 func (vrh *ReportAPIViolationReportHandler) validateViolation(r ReportAPIReports) error {
+	_, err := vrh.validateViolationWithReason(r)
+	return err
+}
+
+func (vrh *ReportAPIViolationReportHandler) validateViolationWithReason(r ReportAPIReports) (string, error) {
 	for _, violation := range r.Reports {
 		if violation.Type != "csp-violation" {
 			continue
 		}
 		for _, value := range vrh.BlockedURIs {
 			if strings.HasPrefix(violation.Body.BlockedURL, value) {
-				return fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
+				return "blocked_uri", fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
 			}
 		}
 		if isBlockedByDomain(violation.Body.BlockedURL, vrh.BlockedDomains) {
-			return fmt.Errorf("blocked URI ('%s') is an invalid resource", violation.Body.BlockedURL)
+			return "blocked_domain", fmt.Errorf("blocked URI ('%s') is an invalid resource", violation.Body.BlockedURL)
 		}
 		if !strings.HasPrefix(violation.Body.DocumentURL, "http") {
-			return fmt.Errorf("document URI ('%s') is invalid", violation.Body.DocumentURL)
+			return "validation_error", fmt.Errorf("document URI ('%s') is invalid", violation.Body.DocumentURL)
 		}
 	}
 
-	return nil
+	return "", nil
 }
 
 func ReportAPICorsHandler(w http.ResponseWriter, r *http.Request) {
