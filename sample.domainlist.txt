@@ -1,0 +1,11 @@
+# Each line is a bare domain name. A blocked URI is dropped when its hostname
+# exactly matches the domain or is any subdomain of it.
+#
+# For example, "kaspersky-labs.com" will block:
+#   https://kaspersky-labs.com/script.js
+#   https://gc.kis.v2.scr.kaspersky-labs.com/foo
+#   https://ff.kis.v2.scr.kaspersky-labs.com/bar
+#
+# Use filter-file for prefix-based matching (e.g. blocking "about:blank",
+# "chrome-extension://", etc.).
+kaspersky-labs.com
