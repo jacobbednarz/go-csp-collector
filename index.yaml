@@ -2,6 +2,22 @@ apiVersion: v1
 entries:
   csp-collector:
   - apiVersion: v2
+    appVersion: 0.0.20
+    created: "2026-05-25T22:21:30.042561171Z"
+    description: A Content Security Policy violation collector
+    digest: 838d6ab6f7eefb67b373170924cb9fccd5081a7a4e57e7442322694eb85ecd6c
+    home: https://github.com/jacobbednarz/go-csp-collector
+    maintainers:
+    - name: jacobbednarz
+      url: https://github.com/jacobbednarz
+    name: csp-collector
+    sources:
+    - https://github.com/jacobbednarz/go-csp-collector
+    type: application
+    urls:
+    - https://github.com/jacobbednarz/go-csp-collector/releases/download/csp-collector-0.0.20/csp-collector-0.0.20.tgz
+    version: 0.0.20
+  - apiVersion: v2
     appVersion: 0.0.19
     created: "2026-05-25T22:06:21.937329522Z"
     description: A Content Security Policy violation collector
@@ -17,4 +33,4 @@ entries:
     urls:
     - https://github.com/jacobbednarz/go-csp-collector/releases/download/csp-collector-0.0.19/csp-collector-0.0.19.tgz
     version: 0.0.19
-generated: "2026-05-25T22:06:21.937342552Z"
+generated: "2026-05-25T22:21:30.042568953Z"
