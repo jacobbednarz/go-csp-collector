@@ -146,11 +146,29 @@ jobs:
             --destination .cr-release-packages \
             --version "$version" \
             --app-version "$version"
+      - name: Install chart-releaser
+        env:
+          CR_VERSION: v1.7.0
+        run: |
+          curl -sSLo cr.tar.gz "https://github.com/helm/chart-releaser/releases/download/${CR_VERSION}/chart-releaser_${CR_VERSION#v}_linux_amd64.tar.gz"
+          tar -xzf cr.tar.gz -C "$RUNNER_TEMP"
+          rm cr.tar.gz
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
       - name: Publish chart
-        uses: helm/chart-releaser-action@v1.7.0
-        with:
-          skip_packaging: true
-          skip_existing: true
-          mark_as_latest: false
         env:
           CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          owner="${GITHUB_REPOSITORY%/*}"
+          repo="${GITHUB_REPOSITORY#*/}"
+
+          cr upload \
+            --owner "$owner" \
+            --git-repo "$repo" \
+            --commit "$(git rev-parse HEAD)" \
+            --skip-existing \
+            --make-release-latest=false
+
+          cr index \
+            --owner "$owner" \
+            --git-repo "$repo" \
+            --push
