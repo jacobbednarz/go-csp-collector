@@ -140,6 +140,7 @@ jobs:
           TAG: ${{ github.event.inputs.ref || github.ref_name }}
         run: |
           version="${TAG#v}"
+          echo "CHART_VERSION=$version" >> "$GITHUB_ENV"
           helm lint deployments/kubernetes-helm
           helm template csp-collector deployments/kubernetes-helm --set image.tag="$version"
           helm package deployments/kubernetes-helm \
@@ -167,8 +168,23 @@ jobs:
             --commit "$(git rev-parse HEAD)" \
             --skip-existing \
             --make-release-latest=false
+      - name: Publish chart index
+        run: |
+          git fetch origin gh-pages
+          git worktree add .gh-pages origin/gh-pages
 
-          cr index \
-            --owner "$owner" \
-            --git-repo "$repo" \
-            --push
+          index_args=(.cr-release-packages --url "https://github.com/${GITHUB_REPOSITORY}/releases/download/csp-collector-${CHART_VERSION}")
+          if [ -f .gh-pages/index.yaml ]; then
+            index_args+=(--merge .gh-pages/index.yaml)
+          fi
+
+          helm repo index "${index_args[@]}"
+          cp .cr-release-packages/index.yaml .gh-pages/index.yaml
+
+          git -C .gh-pages add index.yaml
+          if git -C .gh-pages diff --cached --quiet; then
+            exit 0
+          fi
+
+          git -C .gh-pages commit -m "Update index.yaml"
+          git -C .gh-pages push origin HEAD:gh-pages
