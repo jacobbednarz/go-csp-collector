@@ -186,6 +186,12 @@ Currently supported deployment mechanisms:
 - [kubernetes/helm][3]
 - [systemd][4]
 
+### Release
+
+- Checkout `master`.
+- Create a tag and push.
+- GitHub Actions will build & create a new release.
+
 [1]: https://github.com/jacobbednarz/go-csp-collector/blob/master/sample.filterlist.txt
 [2]: https://github.com/jacobbednarz/go-csp-collector/releases
 [3]: https://github.com/jacobbednarz/go-csp-collector/tree/master/deployments/kubernetes-helm/README.md
