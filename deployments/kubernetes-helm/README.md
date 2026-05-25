@@ -3,7 +3,9 @@
 ## TL;DR;
 
 ```console
-$ helm upgrade csp-collector kubernetes-helm --values custom-values.yaml --install
+$ helm repo add go-csp-collector https://jacobbednarz.github.io/go-csp-collector
+$ helm repo update
+$ helm upgrade csp-collector go-csp-collector/csp-collector --values custom-values.yaml --install
 ```
 
 ## Introduction
@@ -12,7 +14,7 @@ This chart deploys a Content Security Policy violation collector from
 https://github.com/jacobbednarz/go-csp-collector/
 
 Using the [kubernetes-helm/values.yaml][1] file create a custom-values.yaml override
-with just the changed values then run the command above. Example:
+with just the changed values then run the commands above. Example:
 
 ```yaml
 replicaCount: 2
@@ -49,6 +51,8 @@ ingress:
 | `service.port`              | Service port                              | `8080`                                                  |
 | `service.metrics.enabled`   | Exposes the metrics port on the Service   | `false`                                                 |
 | `service.metrics.port`      | Service port for Prometheus metrics       | `9090`                                                  |
+| `image.repository`          | Container image repository                | `jacobbednarz/go-csp-collector`                        |
+| `image.tag`                 | Container image tag                       | Chart app version                                      |
 | `service.annotations`       | Service annotations                       | `{}`                                                    |
 | `metrics.enabled`           | Enables the dedicated metrics listener    | `true`                                                  |
 | `metrics.bindAddress`       | Bind address for the metrics listener     | `0.0.0.0`                                               |

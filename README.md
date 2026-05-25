@@ -190,7 +190,7 @@ Currently supported deployment mechanisms:
 
 - Checkout `master`.
 - Create a tag and push.
-- GitHub Actions will build & create a new release.
+- GitHub Actions will build, publish a new release, and publish the Helm chart.
 
 [1]: https://github.com/jacobbednarz/go-csp-collector/blob/master/sample.filterlist.txt
 [2]: https://github.com/jacobbednarz/go-csp-collector/releases
