@@ -120,3 +120,35 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.ref || github.ref_name }}
         run: gh release create "$TAG" dist/*.tar.gz dist/checksums.txt --title "$TAG" --generate-notes
+
+  release-chart:
+    name: publish helm chart
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+          fetch-depth: 0
+      - uses: azure/setup-helm@v4
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+      - name: Package chart
+        env:
+          TAG: ${{ github.event.inputs.ref || github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          helm lint deployments/kubernetes-helm
+          helm template csp-collector deployments/kubernetes-helm --set image.tag="$version"
+          helm package deployments/kubernetes-helm \
+            --destination .cr-release-packages \
+            --version "$version" \
+            --app-version "$version"
+      - name: Publish chart
+        uses: helm/chart-releaser-action@v1.7.0
+        with:
+          skip_packaging: true
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}

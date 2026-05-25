@@ -6,7 +6,7 @@ replicaCount: 1
 
 image:
   repository: jacobbednarz/go-csp-collector
-  tag: latest
+  tag: ""
   pullPolicy: Always
 
 imagePullSecrets: []

@@ -11,3 +11,13 @@ jobs:
           go-version-file: "go.mod"
       - name: test
         run: go test -v -race ./...
+
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: azure/setup-helm@v4
+      - name: lint
+        run: helm lint deployments/kubernetes-helm
+      - name: template
+        run: helm template csp-collector deployments/kubernetes-helm
