@@ -218,7 +218,7 @@ jobs:
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
           fetch-depth: 0
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
       - name: Configure Git
         run: |
           git config user.name "$GITHUB_ACTOR"
