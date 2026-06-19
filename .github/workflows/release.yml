@@ -22,7 +22,7 @@ jobs:
     name: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
       - name: Validate release tag
@@ -63,7 +63,7 @@ jobs:
             runs-on: windows-latest
     runs-on: ${{ matrix.runs-on }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
       - uses: actions/setup-go@v6
@@ -106,7 +106,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
       - name: Download archives
@@ -138,7 +138,7 @@ jobs:
             artifact: linux-arm64
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
       - name: Docker meta
@@ -214,7 +214,7 @@ jobs:
     needs: image-merge
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
           fetch-depth: 0
