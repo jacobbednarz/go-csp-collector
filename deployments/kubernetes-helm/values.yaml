@@ -34,6 +34,16 @@ custom:
   # Log Json Output
   jsonOutput: true
   debug: false
+  # extraArgs are appended verbatim to the container args, after the flags
+  # managed by the values above. One list entry per argv element, so a flag
+  # that takes a value is either two entries or a single "--flag=value". Use
+  # this for collector flags the chart does not expose yet. Eg:
+  # extraArgs:
+  #   - "--log-client-ip"
+  #   - "--health-check-path=/healthz"
+  #   - "--filter-domains-file"
+  #   - "/configs/domainlist.txt"
+  extraArgs: []
 
 ingress:
   enabled: false

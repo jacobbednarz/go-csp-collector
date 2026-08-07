@@ -66,6 +66,9 @@ spec:
             - "--metrics-port"
             - {{ .Values.metrics.port | quote }}
           {{- end }}
+          {{- range .Values.custom.extraArgs }}
+            - {{ . | quote }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 8080

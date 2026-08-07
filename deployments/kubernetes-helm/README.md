@@ -63,5 +63,25 @@ ingress:
 | `custom.debug`              | Logs in debug mode                        | `false`                                                 |
 | `custom.filterlist`         | Name of file within the configMaps dir for custom filters| `false` Uses list compiled into the app  |
 | `custom.jsonOutput`         | Log entries as json objects, use `false` for plain text  | `true`                                   |
+| `custom.extraArgs`          | Extra CLI args appended to the container args, one list entry per argv element| `[]`                |
+
+### Extra CLI arguments
+
+Collector flags that the chart does not expose as a value can be passed
+through `custom.extraArgs`. Each list entry becomes one argument, so a flag
+that takes a value is either two entries or a single `--flag=value`:
+
+```yaml
+custom:
+  extraArgs:
+    - "--log-client-ip"
+    - "--truncate-query-fragment"
+    - "--health-check-path=/healthz"
+    - "--filter-domains-file"
+    - "/configs/domainlist.txt"
+```
+
+These are appended after the flags rendered from the values above. Run
+`csp_collector --help` (or see the project README) for the full flag list.
 
 [1]: https://github.com/jacobbednarz/go-csp-collector/tree/master/deployments/kubernetes-helm/values.yaml
