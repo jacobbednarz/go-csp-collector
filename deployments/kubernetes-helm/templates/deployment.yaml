@@ -66,8 +66,25 @@ spec:
             - "--metrics-port"
             - {{ .Values.metrics.port | quote }}
           {{- end }}
-          {{- range .Values.custom.extraArgs }}
-            - {{ . | quote }}
+          {{- if .Values.custom.filterDomainsFile }}
+            - "--filter-domains-file"
+            - "/configs/{{- .Values.custom.filterDomainsFile -}}"
+          {{- end }}
+          {{- if .Values.custom.healthCheckPath }}
+            - "--health-check-path"
+            - {{ .Values.custom.healthCheckPath | quote }}
+          {{- end }}
+          {{- if .Values.custom.truncateQueryFragment }}
+            - "--truncate-query-fragment"
+          {{- end }}
+          {{- if .Values.custom.logClientIP }}
+            - "--log-client-ip"
+          {{- end }}
+          {{- if .Values.custom.logTruncatedClientIP }}
+            - "--log-truncated-client-ip"
+          {{- end }}
+          {{- if .Values.custom.queryParamsMetadata }}
+            - "--query-params-metadata"
           {{- end }}
           ports:
             - name: http
