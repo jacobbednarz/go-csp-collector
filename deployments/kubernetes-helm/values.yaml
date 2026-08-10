@@ -31,19 +31,28 @@ custom:
   #  or the path within the configMaps directly without any prefixes. Eg
   # filterlist: 'filterlist.txt'
   filterlist: false
+  # filterDomainsFile is either false, to disable domain filtering,
+  #  or the path within the configMaps directly without any prefixes. Eg
+  # filterDomainsFile: 'domainlist.txt'
+  filterDomainsFile: false
   # Log Json Output
   jsonOutput: true
   debug: false
-  # extraArgs are appended verbatim to the container args, after the flags
-  # managed by the values above. One list entry per argv element, so a flag
-  # that takes a value is either two entries or a single "--flag=value". Use
-  # this for collector flags the chart does not expose yet. Eg:
-  # extraArgs:
-  #   - "--log-client-ip"
-  #   - "--health-check-path=/healthz"
-  #   - "--filter-domains-file"
-  #   - "/configs/domainlist.txt"
-  extraArgs: []
+  # Truncate query string and fragment from document-uri, referrer and
+  # blocked-uri before logging (reduces risk of logging sensitive data).
+  truncateQueryFragment: false
+  # Log the (full) reporting client IP address with each report.
+  logClientIP: false
+  # Log the truncated reporting client IP address (IPv4 /24, IPv6 /64).
+  # If both logClientIP and logTruncatedClientIP are enabled, the truncated
+  # value wins because the collector writes it last.
+  logTruncatedClientIP: false
+  # Write query parameters of the report URI as a JSON object under the
+  # metadata field instead of as a single metadata string.
+  queryParamsMetadata: false
+  # Override the default /_healthcheck endpoint path. Empty (default) keeps
+  # the collector default.
+  healthCheckPath: ""
 
 ingress:
   enabled: false

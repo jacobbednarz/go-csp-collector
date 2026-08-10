@@ -63,25 +63,11 @@ ingress:
 | `custom.debug`              | Logs in debug mode                        | `false`                                                 |
 | `custom.filterlist`         | Name of file within the configMaps dir for custom filters| `false` Uses list compiled into the app  |
 | `custom.jsonOutput`         | Log entries as json objects, use `false` for plain text  | `true`                                   |
-| `custom.extraArgs`          | Extra CLI args appended to the container args, one list entry per argv element| `[]`                |
-
-### Extra CLI arguments
-
-Collector flags that the chart does not expose as a value can be passed
-through `custom.extraArgs`. Each list entry becomes one argument, so a flag
-that takes a value is either two entries or a single `--flag=value`:
-
-```yaml
-custom:
-  extraArgs:
-    - "--log-client-ip"
-    - "--truncate-query-fragment"
-    - "--health-check-path=/healthz"
-    - "--filter-domains-file"
-    - "/configs/domainlist.txt"
-```
-
-These are appended after the flags rendered from the values above. Run
-`csp_collector --help` (or see the project README) for the full flag list.
+| `custom.filterDomainsFile`  | Name of file within the configMaps dir for custom domain filtering. `false` disables it. | `false` |
+| `custom.truncateQueryFragment` | Truncate query string and fragment from logged URLs to reduce risk of leaking sensitive data. | `false` |
+| `custom.logClientIP`        | Log the (full) reporting client IP address with each report. | `false` |
+| `custom.logTruncatedClientIP` | Log the truncated reporting client IP address (IPv4 /24, IPv6 /64). | `false` |
+| `custom.queryParamsMetadata` | Write report URI query parameters as a JSON object under the `metadata` field instead of a single string. | `false` |
+| `custom.healthCheckPath`    | Override the default `/_healthcheck` endpoint path. Empty keeps the collector default. | `""` |
 
 [1]: https://github.com/jacobbednarz/go-csp-collector/tree/master/deployments/kubernetes-helm/values.yaml
