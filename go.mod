@@ -8,7 +8,7 @@ require (
 	github.com/davidmytton/url-verifier v1.0.1
 	github.com/gorilla/mux v1.8.1
 	github.com/prometheus/client_golang v1.24.1
-	github.com/sirupsen/logrus v1.10.1
+	github.com/sirupsen/logrus v1.10.2
 )
 
 require (
