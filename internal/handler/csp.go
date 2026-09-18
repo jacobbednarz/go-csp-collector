@@ -34,17 +34,14 @@ func isBlockedByDomain(blockedURI string, domains []string) bool {
 	return false
 }
 
-// CSPReport is the structure of the HTTP payload delivered by CSP2's
-// report-uri directive: a single, un-batched object per violation, never an
-// array. This predates the Reporting API (and CSP3's report-to directive,
-// which uses it instead) so it carries no `type` discriminator of its own.
+// CSPReport is the payload delivered by CSP2's report-uri directive: a
+// single, un-batched object per violation, never an array.
 type CSPReport struct {
 	Body CSPReportBody `json:"csp-report"`
 }
 
-// ReportType satisfies ReportTyped for interface conformance with
-// BatchReportHandler. NewCSPHandler leaves ExpectedType empty, so this
-// value is never actually compared against anything.
+// ReportType satisfies ReportTyped. Unused: NewCSPHandler leaves
+// ExpectedType empty.
 func (r CSPReport) ReportType() string { return "csp-violation" }
 
 // CSPReportBody contains the fields that are nested within the
@@ -64,12 +61,7 @@ type CSPReportBody struct {
 	ColumnNumber       uint32      `json:"column-number"`
 }
 
-// NewCSPHandler builds the legacy report-uri CSP handler on top of the
-// shared BatchReportHandler, using AllowSingleObject to accept its
-// single-object wire format through the same array-oriented decoder every
-// other handler uses. reportOnly is closed over the same way NewNELHandler
-// closes over its own reportOnly flag, since the original handler derived
-// it from which route it was registered on, not from the report body.
+// NewCSPHandler builds the legacy report-uri CSP handler on BatchReportHandler.
 func NewCSPHandler(reportOnly bool, blockedURIs, blockedDomains []string, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *log.Logger, m *metrics.Metrics) http.Handler {
 	return &BatchReportHandler[CSPReport]{
 		HandlerName:       "csp",
