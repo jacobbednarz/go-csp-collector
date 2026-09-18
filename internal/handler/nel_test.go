@@ -82,6 +82,26 @@ func TestGenericNELHandlerInvalidURLReturns400(t *testing.T) {
 	}
 }
 
+func TestGenericNELHandlerMetricsValidationError(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+	h := NewNELHandler(false, false, false, false, false, l, m)
+
+	payload, _ := json.Marshal(sampleNELReport("about:blank"))
+	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("nel", "validation_error")); got != 1 {
+		t.Fatalf("reports_errors_total validation_error = %v, want 1", got)
+	}
+}
+
 func TestGenericNELHandlerLogsReportOnly(t *testing.T) {
 	var logBuf bytes.Buffer
 	l := logrus.New()
@@ -178,5 +198,58 @@ func TestGenericNELHandlerMetricsSuccessAndIgnored(t *testing.T) {
 	}
 	if got := testutil.ToFloat64(m.ReportIgnored.WithLabelValues("nel", "unsupported_type")); got != 1 {
 		t.Fatalf("reports_ignored_total = %v, want 1", got)
+	}
+}
+
+func TestGenericNELHandlerRejectsBareObject(t *testing.T) {
+	// NEL never sets AllowSingleObject, so unlike /csp, a valid but
+	// non-array body must still be rejected, not silently accepted as a
+	// single-item batch.
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+	h := NewNELHandler(false, false, false, false, false, l, m)
+
+	payload, _ := json.Marshal(sampleNELReport("https://example.com/page")[0])
+	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for a bare object, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("nel", "decode_error")); got != 1 {
+		t.Fatalf("reports_errors_total decode_error = %v, want 1", got)
+	}
+}
+
+func TestGenericNELHandlerTruncatesQueryStringFragment(t *testing.T) {
+	var logBuf bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&logBuf)
+	h := NewNELHandler(false, true, false, false, false, l, nil)
+
+	reports := []NELReport{
+		{
+			Type: "network-error",
+			URL:  "https://example.com/page?a=b#frag",
+			Body: NELReportBody{Type: "tcp.refused", Referrer: "https://ref.example.com/?a=b#frag"},
+		},
+	}
+	payload, _ := json.Marshal(reports)
+	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	out := logBuf.String()
+	if strings.Contains(out, "?a=b") || strings.Contains(out, "#frag") {
+		t.Errorf("expected query string and fragment to be truncated, got: %s", out)
+	}
+	if !strings.Contains(out, "url=\"https://example.com/page\"") {
+		t.Errorf("expected truncated url, got: %s", out)
 	}
 }
