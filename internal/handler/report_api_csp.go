@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,11 +10,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// CSPReport is the structure of the HTTP payload the system receives.
-type ReportAPIReports struct {
-	Reports []ReportAPIReport `json:"reports"`
-}
-
 type ReportAPIReport struct {
 	Age       int                `json:"age"`
 	Body      ReportAPIViolation `json:"body"`
@@ -23,6 +17,8 @@ type ReportAPIReport struct {
 	URL       string             `json:"url"`
 	UserAgent string             `json:"user_agent"`
 }
+
+func (r ReportAPIReport) ReportType() string { return r.Type }
 
 type ReportAPIViolation struct {
 	BlockedURL         string `json:"blockedURL"`
@@ -38,167 +34,107 @@ type ReportAPIViolation struct {
 	StatusCode         int    `json:"statusCode"`
 }
 
-type ReportAPIViolationReportHandler struct {
-	TruncateQueryStringFragment bool
-	BlockedURIs                 []string
-	BlockedDomains              []string
+// NewReportAPICSPHandler builds the reporting-api/csp handler on BatchReportHandler.
+func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *log.Logger, m *metrics.Metrics) http.Handler {
+	return &BatchReportHandler[ReportAPIReport]{
+		HandlerName:          "reporting_api_csp",
+		ExpectedType:         "csp-violation",
+		MetadataObject:       metadataObject,
+		LogClientIP:          logClientIP,
+		LogTruncatedClientIP: logTruncatedClientIP,
+		Logger:               logger,
+		Metrics:              m,
 
-	LogClientIP          bool
-	LogTruncatedClientIP bool
-	MetadataObject       bool
+		SetResponseHeaders: setCORSResponseHeaders,
 
-	Logger  *log.Logger
-	Metrics *metrics.Metrics
-}
+		Validate: func(items []ReportAPIReport) (string, error) {
+			for _, violation := range items {
+				if violation.Type != "csp-violation" {
+					continue
+				}
+				for _, value := range blockedURIs {
+					if strings.HasPrefix(violation.Body.BlockedURL, value) {
+						return "blocked_uri", fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
+					}
+				}
+				if isBlockedByDomain(violation.Body.BlockedURL, blockedDomains) {
+					return "blocked_domain", fmt.Errorf("blocked URI ('%s') is an invalid resource", violation.Body.BlockedURL)
+				}
+				if !strings.HasPrefix(violation.Body.DocumentURL, "http") {
+					return "validation_error", fmt.Errorf("document URI ('%s') is invalid", violation.Body.DocumentURL)
+				}
+			}
+			return "", nil
+		},
 
-func (vrh *ReportAPIViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
-	decoder := json.NewDecoder(r.Body)
-	var reports_raw []ReportAPIReport
-
-	err := decoder.Decode(&reports_raw)
-	if err != nil {
-		if vrh.Metrics != nil {
-			vrh.Metrics.ReportErrors.WithLabelValues("reporting_api_csp", "decode_error").Inc()
-		}
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		vrh.Logger.Debugf("unable to decode invalid JSON payload: %s", err)
-		return
-	}
-
-	defer r.Body.Close()
-
-	reports := ReportAPIReports{
-		Reports: reports_raw,
-	}
-
-	failureClass, reportValidation := vrh.validateViolationWithReason(reports)
-	if reportValidation != nil {
-		if vrh.Metrics != nil {
-			switch failureClass {
+		RecordValidationErrorMetric: func(reason string) {
+			if m == nil {
+				return
+			}
+			switch reason {
 			case "blocked_uri":
-				vrh.Metrics.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_uri").Inc()
+				m.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_uri").Inc()
 			case "blocked_domain":
-				vrh.Metrics.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_domain").Inc()
+				m.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_domain").Inc()
 			default:
-				vrh.Metrics.ReportErrors.WithLabelValues("reporting_api_csp", "validation_error").Inc()
+				m.ReportErrors.WithLabelValues("reporting_api_csp", "validation_error").Inc()
 			}
-		}
-		http.Error(w, reportValidation.Error(), http.StatusBadRequest)
-		vrh.Logger.Debugf("received invalid payload: %s", reportValidation.Error())
-		return
-	}
+		},
 
-	var metadata interface{}
-	if vrh.MetadataObject {
-		metadataMap := make(map[string]string)
-		query := r.URL.Query()
-
-		for k, v := range query {
-			metadataMap[k] = v[0]
-		}
-
-		metadata = metadataMap
-	} else {
-		metadatas, gotMetadata := r.URL.Query()["metadata"]
-		if gotMetadata {
-			metadata = metadatas[0]
-		}
-	}
-
-	for _, violation := range reports.Reports {
-		report_only := violation.Body.Disposition == "report"
-		lf := log.Fields{
-			"report_only":         report_only,
-			"document_uri":        violation.Body.DocumentURL,
-			"referrer":            violation.Body.Referrer,
-			"blocked_uri":         violation.Body.BlockedURL,
-			"violated_directive":  violation.Body.EffectiveDirective,
-			"effective_directive": violation.Body.EffectiveDirective,
-			"original_policy":     violation.Body.OriginalPolicy,
-			"disposition":         violation.Body.Disposition,
-			"status_code":         violation.Body.StatusCode,
-			"source_file":         violation.Body.SourceFile,
-			"line_number":         violation.Body.LineNumber,
-			"column_number":       violation.Body.ColumnNumber,
-			"metadata":            metadata,
-			"path":                r.URL.Path,
-		}
-
-		if vrh.TruncateQueryStringFragment {
-			lf["document_uri"] = utils.TruncateQueryStringFragment(violation.Body.DocumentURL)
-			lf["referrer"] = utils.TruncateQueryStringFragment(violation.Body.Referrer)
-			lf["blocked_uri"] = utils.TruncateQueryStringFragment(violation.Body.BlockedURL)
-			lf["source_file"] = utils.TruncateQueryStringFragment(violation.Body.SourceFile)
-		}
-
-		if vrh.LogClientIP {
-			ip, err := utils.GetClientIP(r)
-			if err != nil {
-				vrh.Logger.Warnf("unable to parse client ip: %s", err)
+		Process: func(report ReportAPIReport, r *http.Request, metadata interface{}) ProcessResult {
+			reportOnly := report.Body.Disposition == "report"
+			lf := log.Fields{
+				"report_only":         reportOnly,
+				"document_uri":        report.Body.DocumentURL,
+				"referrer":            report.Body.Referrer,
+				"blocked_uri":         report.Body.BlockedURL,
+				"violated_directive":  report.Body.EffectiveDirective,
+				"effective_directive": report.Body.EffectiveDirective,
+				"original_policy":     report.Body.OriginalPolicy,
+				"disposition":         report.Body.Disposition,
+				"status_code":         report.Body.StatusCode,
+				"source_file":         report.Body.SourceFile,
+				"line_number":         report.Body.LineNumber,
+				"column_number":       report.Body.ColumnNumber,
+				"metadata":            metadata,
+				"path":                r.URL.Path,
 			}
-			lf["client_ip"] = ip.String()
-		}
 
-		if vrh.LogTruncatedClientIP {
-			ip, err := utils.GetClientIP(r)
-			if err != nil {
-				vrh.Logger.Warnf("unable to parse client ip: %s", err)
+			if truncateQueryStringFragment {
+				lf["document_uri"] = utils.TruncateQueryStringFragment(report.Body.DocumentURL)
+				lf["referrer"] = utils.TruncateQueryStringFragment(report.Body.Referrer)
+				lf["blocked_uri"] = utils.TruncateQueryStringFragment(report.Body.BlockedURL)
+				lf["source_file"] = utils.TruncateQueryStringFragment(report.Body.SourceFile)
 			}
-			lf["client_ip"] = utils.TruncateClientIP(ip)
-		}
 
-		vrh.Logger.WithFields(lf).Info()
-		if vrh.Metrics != nil {
 			mode := "enforced"
-			if report_only {
+			if reportOnly {
 				mode = "report_only"
 			}
-			vrh.Metrics.Reports.WithLabelValues("reporting_api_csp", mode).Inc()
-		}
+
+			return ProcessResult{Fields: lf, Mode: mode}
+		},
 	}
 }
 
-func (vrh *ReportAPIViolationReportHandler) validateViolation(r ReportAPIReports) error {
-	_, err := vrh.validateViolationWithReason(r)
-	return err
-}
-
-func (vrh *ReportAPIViolationReportHandler) validateViolationWithReason(r ReportAPIReports) (string, error) {
-	for _, violation := range r.Reports {
-		if violation.Type != "csp-violation" {
-			continue
-		}
-		for _, value := range vrh.BlockedURIs {
-			if strings.HasPrefix(violation.Body.BlockedURL, value) {
-				return "blocked_uri", fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
-			}
-		}
-		if isBlockedByDomain(violation.Body.BlockedURL, vrh.BlockedDomains) {
-			return "blocked_domain", fmt.Errorf("blocked URI ('%s') is an invalid resource", violation.Body.BlockedURL)
-		}
-		if !strings.HasPrefix(violation.Body.DocumentURL, "http") {
-			return "validation_error", fmt.Errorf("document URI ('%s') is invalid", violation.Body.DocumentURL)
-		}
-	}
-
-	return "", nil
+// setCORSResponseHeaders is shared with ReportAPICorsHandler so the
+// preflight and the real response agree on what's allowed.
+func setCORSResponseHeaders(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	allow_origin := utils.Ternary(origin != "" && utils.ValidateOrigin(origin), origin, "*")
+	w.Header().Set("Access-Control-Allow-Origin", allow_origin)
+	w.Header().Set("vary", "Origin")
 }
 
 func ReportAPICorsHandler(w http.ResponseWriter, r *http.Request) {
-	origin := r.Header.Get("Origin")
+	setCORSResponseHeaders(w, r)
+
 	method := r.Header.Get("Access-Control-Request-Method")
 	header := r.Header.Get("Access-Control-Request-Headers")
-	allow_origin := utils.Ternary(origin != "" && utils.ValidateOrigin(origin), origin, "*")
 	allow_method := utils.Ternary(method != "", method, "*")
 	allow_header := utils.Ternary(header != "", header, "*")
 	// Special handling due to bug in Chrome
 	// https://bugs.chromium.org/p/chromium/issues/detail?id=1152867
-	w.Header().Set("Access-Control-Allow-Origin", allow_origin)
 	w.Header().Set("Access-Control-Allow-Methods", allow_method)
 	w.Header().Set("Access-Control-Max-Age", "60")
 	w.Header().Set("Access-Control-Allow-Headers", allow_header)
