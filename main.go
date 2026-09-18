@@ -159,17 +159,9 @@ func main() {
 	))).Methods("POST")
 
 	r.HandleFunc("/reporting-api/csp", handler.ReportAPICorsHandler).Methods("OPTIONS")
-	r.Handle("/reporting-api/csp", wrapWithPrometheus("reporting_api_csp", "/reporting-api/csp", &handler.ReportAPIViolationReportHandler{
-		BlockedURIs:                 ignoredBlockedURIs,
-		BlockedDomains:              blockedDomains,
-		TruncateQueryStringFragment: *truncateQueryStringFragment,
-
-		LogClientIP:          *logClientIP,
-		LogTruncatedClientIP: *logTruncatedClientIP,
-		MetadataObject:       *metadataObject,
-		Logger:               logger,
-		Metrics:              m,
-	})).Methods("POST")
+	r.Handle("/reporting-api/csp", wrapWithPrometheus("reporting_api_csp", "/reporting-api/csp", handler.NewReportAPICSPHandler(
+		ignoredBlockedURIs, blockedDomains, *truncateQueryStringFragment, *logClientIP, *logTruncatedClientIP, *metadataObject, logger, m,
+	))).Methods("POST")
 
 	r.Handle("/", wrapWithPrometheus("csp", "/", &handler.CSPViolationReportHandler{
 		BlockedURIs:                 ignoredBlockedURIs,
