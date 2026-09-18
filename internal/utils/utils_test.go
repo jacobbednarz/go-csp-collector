@@ -61,7 +61,7 @@ func TestLogsPath(t *testing.T) {
 	}
 	recorder := httptest.NewRecorder()
 
-	cspViolationHandler := &handler.CSPViolationReportHandler{BlockedURIs: []string{"foo"}, Logger: log}
+	cspViolationHandler := handler.NewCSPHandler(false, []string{"foo"}, nil, false, false, false, false, log, nil)
 	cspViolationHandler.ServeHTTP(recorder, request)
 
 	response := recorder.Result()

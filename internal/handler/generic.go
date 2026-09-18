@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
@@ -33,16 +35,33 @@ type ProcessResult struct {
 // metrics. Only the type-specific field extraction is supplied by the
 // caller.
 //
-// This covers NEL's shape and the shape used by coop.go/coep.go/default.go.
-// It does NOT cover the legacy CSPViolationReportHandler (decodes a single
-// object, not an array) or ReportAPIViolationReportHandler's
-// blocked-URI/domain validation (rejects the whole batch before logging
-// anything, a fundamentally different control flow). Explored and
-// deliberately not folded in here, see docs/experiment-notes.md.
+// This covers every array-based report endpoint (NEL, COOP, COEP, default,
+// reporting-api/csp) and, with AllowSingleObject, CSP's legacy report-uri
+// endpoint too, which POSTs a single un-batched object rather than an
+// array.
 type BatchReportHandler[T ReportTyped] struct {
 	HandlerName    string
 	ExpectedType   string
 	MetadataObject bool
+
+	// AllowSingleObject, if set, makes a request body that is valid JSON
+	// but not a top-level array get treated as a single-item batch instead
+	// of being rejected as a decode error. This exists for CSP's legacy
+	// report-uri delivery, which predates the Reporting API and always
+	// POSTs exactly one un-batched report per violation
+	// (`{"csp-report": {...}}`), never an array. Every other handler in
+	// this codebase was specified after the Reporting API existed and only
+	// ever receives arrays, so this defaults to false and their existing
+	// strict-array behavior (a bare object still 422s) is unchanged.
+	//
+	// One deliberate side effect: with this set, an endpoint that used to
+	// only ever accept a single object will now also accept a genuine JSON
+	// array of several objects in one request, processing each as its own
+	// report. The old single-object decoder would have rejected that shape
+	// outright (a decode error, since a struct can't unmarshal from a JSON
+	// array). This is a real, noted behavior change from the original
+	// legacy handler, not an oversight.
+	AllowSingleObject bool
 
 	LogClientIP          bool
 	LogTruncatedClientIP bool
@@ -97,18 +116,36 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	decoder := json.NewDecoder(r.Body)
-	var rawItems []json.RawMessage
-
-	if err := decoder.Decode(&rawItems); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
 		if h.Metrics != nil {
 			h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "decode_error").Inc()
 		}
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.Logger.Debugf("unable to decode invalid JSON payload: %s", err)
+		h.Logger.Debugf("unable to read request body: %s", err)
 		return
 	}
 	defer r.Body.Close()
+
+	var rawItems []json.RawMessage
+	if err := json.Unmarshal(body, &rawItems); err != nil {
+		var typeErr *json.UnmarshalTypeError
+		if h.AllowSingleObject && errors.As(err, &typeErr) {
+			// Valid JSON, just not a top-level array - treat the whole body
+			// as a single-item batch rather than rejecting it. A genuinely
+			// malformed body (a json.SyntaxError, e.g. non-JSON text) still
+			// falls through to the decode_error path below regardless of
+			// this flag.
+			rawItems = []json.RawMessage{json.RawMessage(body)}
+		} else {
+			if h.Metrics != nil {
+				h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "decode_error").Inc()
+			}
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			h.Logger.Debugf("unable to decode invalid JSON payload: %s", err)
+			return
+		}
+	}
 
 	var items []T
 	for _, raw := range rawItems {
