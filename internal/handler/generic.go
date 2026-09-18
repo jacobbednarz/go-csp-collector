@@ -108,9 +108,24 @@ type BatchReportHandler[T ReportTyped] struct {
 	// ReportErrors with a different label. A single default label choice
 	// cannot represent that on its own.
 	RecordValidationErrorMetric func(reason string)
+
+	// SetResponseHeaders, if set, runs first, before the method check, so
+	// it applies to every response this handler can produce (200, 400,
+	// 422, 405 alike). This exists for reporting-api/csp: its OPTIONS
+	// preflight (ReportAPICorsHandler) has always advertised the
+	// requesting origin as allowed, but the actual POST response never
+	// carried any CORS headers of its own, so browsers rejected real
+	// report deliveries client-side as a CORS failure even though the
+	// server received and logged them correctly. Optional because no
+	// other handler in this codebase needs it.
+	SetResponseHeaders func(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.SetResponseHeaders != nil {
+		h.SetResponseHeaders(w, r)
+	}
+
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
