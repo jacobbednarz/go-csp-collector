@@ -150,27 +150,13 @@ func main() {
 		Metrics:              m,
 	})).Methods("POST")
 
-	r.Handle("/nel/report-only", wrapWithPrometheus("nel", "/nel/report-only", &handler.NELViolationReportHandler{
-		TruncateQueryStringFragment: *truncateQueryStringFragment,
+	r.Handle("/nel/report-only", wrapWithPrometheus("nel", "/nel/report-only", handler.NewNELHandler(
+		true, *truncateQueryStringFragment, *logClientIP, *logTruncatedClientIP, *metadataObject, logger, m,
+	))).Methods("POST")
 
-		LogClientIP:          *logClientIP,
-		LogTruncatedClientIP: *logTruncatedClientIP,
-		MetadataObject:       *metadataObject,
-		Logger:               logger,
-		ReportOnly:           true,
-		Metrics:              m,
-	})).Methods("POST")
-
-	r.Handle("/nel", wrapWithPrometheus("nel", "/nel", &handler.NELViolationReportHandler{
-		TruncateQueryStringFragment: *truncateQueryStringFragment,
-
-		LogClientIP:          *logClientIP,
-		LogTruncatedClientIP: *logTruncatedClientIP,
-		MetadataObject:       *metadataObject,
-		Logger:               logger,
-		ReportOnly:           false,
-		Metrics:              m,
-	})).Methods("POST")
+	r.Handle("/nel", wrapWithPrometheus("nel", "/nel", handler.NewNELHandler(
+		false, *truncateQueryStringFragment, *logClientIP, *logTruncatedClientIP, *metadataObject, logger, m,
+	))).Methods("POST")
 
 	r.HandleFunc("/reporting-api/csp", handler.ReportAPICorsHandler).Methods("OPTIONS")
 	r.Handle("/reporting-api/csp", wrapWithPrometheus("reporting_api_csp", "/reporting-api/csp", &handler.ReportAPIViolationReportHandler{
