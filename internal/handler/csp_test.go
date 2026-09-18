@@ -50,6 +50,12 @@ func newTestCSPHandler(blockedURIs, blockedDomains []string, l *logrus.Logger, m
 	return NewCSPHandler(false, blockedURIs, blockedDomains, false, false, false, false, l, m)
 }
 
+func TestCSPReportType(t *testing.T) {
+	if got := (CSPReport{}).ReportType(); got != "csp-violation" {
+		t.Errorf("expected ReportType() to return %q, got %q", "csp-violation", got)
+	}
+}
+
 func TestGenericCSPHandlerInvalidBlockedURIs(t *testing.T) {
 	for _, blockedURI := range invalidBlockedURIs {
 		// Makes the test name more readable for the output.
@@ -435,6 +441,100 @@ func TestCSPHandlerMetricsFilteredDomain(t *testing.T) {
 	}
 	if got := testutil.ToFloat64(m.ReportFiltered.WithLabelValues("csp", "blocked_domain")); got != 1 {
 		t.Fatalf("reports_filtered_total blocked_domain = %v, want 1", got)
+	}
+}
+
+func TestCSPHandlerMetricsFilteredURI(t *testing.T) {
+	payload := []byte(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"inline"}}`)
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := newTestCSPHandler([]string{"inline"}, nil, l, m)
+
+	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.ReportFiltered.WithLabelValues("csp", "blocked_uri")); got != 1 {
+		t.Fatalf("reports_filtered_total blocked_uri = %v, want 1", got)
+	}
+}
+
+func TestCSPHandlerMetricsValidationError(t *testing.T) {
+	payload := []byte(`{"csp-report":{"document-uri":"about:blank","blocked-uri":"https://cdn.example.com/app.js"}}`)
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := newTestCSPHandler(nil, nil, l, m)
+
+	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("csp", "validation_error")); got != 1 {
+		t.Fatalf("reports_errors_total validation_error = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(m.ReportFiltered.WithLabelValues("csp", "validation_error")); got != 0 {
+		t.Fatalf("reports_filtered_total validation_error = %v, want 0", got)
+	}
+}
+
+func TestGenericCSPHandlerReportOnly(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	var logBuffer bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&logBuffer)
+
+	h := NewCSPHandler(true, nil, nil, false, false, false, false, l, m)
+
+	payload := []byte(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/app.js"}}`)
+	req := httptest.NewRequest("POST", "/csp/report-only", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if !strings.Contains(logBuffer.String(), "report_only=true") {
+		t.Errorf("expected report_only=true in log output, got: %s", logBuffer.String())
+	}
+	if got := testutil.ToFloat64(m.Reports.WithLabelValues("csp", "report_only")); got != 1 {
+		t.Fatalf("reports_total report_only = %v, want 1", got)
+	}
+}
+
+func TestGenericCSPHandlerTruncatesQueryStringFragment(t *testing.T) {
+	var logBuffer bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&logBuffer)
+
+	h := NewCSPHandler(false, nil, nil, true, false, false, false, l, nil)
+
+	payload := []byte(`{"csp-report":{"document-uri":"https://example.com/?a=b#frag","referrer":"https://ref.example.com/?a=b#frag","blocked-uri":"https://cdn.example.com/app.js?a=b#frag","source-file":"https://example.com/app.js?a=b#frag"}}`)
+	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	out := logBuffer.String()
+	if strings.Contains(out, "?a=b") || strings.Contains(out, "#frag") {
+		t.Errorf("expected query string and fragment to be truncated from every truncated field, got: %s", out)
+	}
+	if !strings.Contains(out, "document_uri=\"https://example.com/\"") {
+		t.Errorf("expected truncated document_uri, got: %s", out)
 	}
 }
 

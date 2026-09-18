@@ -31,6 +31,28 @@ func TestGenericReportAPICSPHandlerDisallowedMethods(t *testing.T) {
 	}
 }
 
+func TestGenericReportAPICSPHandlerRejectsBareObject(t *testing.T) {
+	// reporting-api/csp never sets AllowSingleObject, so unlike /csp, a
+	// valid but non-array body must still be rejected.
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, m)
+
+	body := []byte(`{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/app.js","documentURL":"https://example.com","disposition":"report"}}`)
+	req := httptest.NewRequest("POST", "/reporting-api/csp", bytes.NewBuffer(body))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for a bare object, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("reporting_api_csp", "decode_error")); got != 1 {
+		t.Fatalf("reports_errors_total decode_error = %v, want 1", got)
+	}
+}
+
 func TestGenericReportAPICSPHandlerWellFormedBatch(t *testing.T) {
 	rawReport := []byte(`[
     {
@@ -137,6 +159,21 @@ func TestGenericReportAPICSPHandlerMetricsFilteredURI(t *testing.T) {
 	}
 }
 
+func TestGenericReportAPICSPHandlerValidationRejectionWithNilMetrics(t *testing.T) {
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := NewReportAPICSPHandler([]string{"inline"}, nil, false, false, false, false, l, nil)
+	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"inline","documentURL":"https://example.com","disposition":"enforce"}}]`)
+	req := httptest.NewRequest("POST", "/reporting-api/csp", bytes.NewBuffer(body))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 even with nil metrics, got %d", rr.Code)
+	}
+}
+
 func TestGenericReportAPICSPHandlerMetricsFilteredDomain(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
@@ -197,6 +234,49 @@ func TestGenericReportAPICSPHandlerMetricsSuccess(t *testing.T) {
 	}
 	if got := testutil.ToFloat64(m.Reports.WithLabelValues("reporting_api_csp", "report_only")); got != 1 {
 		t.Fatalf("reports_total report_only = %v, want 1", got)
+	}
+}
+
+func TestGenericReportAPICSPHandlerMetricsSuccessEnforced(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, m)
+	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/app.js","documentURL":"https://example.com","disposition":"enforce"}}]`)
+	req := httptest.NewRequest("POST", "/reporting-api/csp", bytes.NewBuffer(body))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.Reports.WithLabelValues("reporting_api_csp", "enforced")); got != 1 {
+		t.Fatalf("reports_total enforced = %v, want 1", got)
+	}
+}
+
+func TestGenericReportAPICSPHandlerTruncatesQueryStringFragment(t *testing.T) {
+	var logBuf bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&logBuf)
+	h := NewReportAPICSPHandler(nil, nil, true, false, false, false, l, nil)
+
+	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/app.js?a=b#frag","documentURL":"https://example.com/?a=b#frag","referrer":"https://ref.example.com/?a=b#frag","sourceFile":"https://example.com/app.js?a=b#frag","disposition":"report"}}]`)
+	req := httptest.NewRequest("POST", "/reporting-api/csp", bytes.NewBuffer(body))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	out := logBuf.String()
+	if strings.Contains(out, "?a=b") || strings.Contains(out, "#frag") {
+		t.Errorf("expected query string and fragment to be truncated, got: %s", out)
+	}
+	if !strings.Contains(out, "document_uri=\"https://example.com/\"") {
+		t.Errorf("expected truncated document_uri, got: %s", out)
 	}
 }
 
@@ -331,5 +411,52 @@ func TestGenericReportAPICSPHandlerJSONUnmarshal(t *testing.T) {
 	}
 	if report.ReportType() != "csp-violation" {
 		t.Errorf("expected ReportType() to return %q, got %q", "csp-violation", report.ReportType())
+	}
+}
+
+func TestReportAPICorsHandlerPreflight(t *testing.T) {
+	req := httptest.NewRequest("OPTIONS", "/reporting-api/csp", nil)
+	req.Header.Set("Origin", "https://example.com")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "content-type")
+	rr := httptest.NewRecorder()
+
+	ReportAPICorsHandler(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	cases := map[string]string{
+		"Access-Control-Allow-Origin":  "https://example.com",
+		"Access-Control-Allow-Methods": "POST",
+		"Access-Control-Allow-Headers": "content-type",
+		"Access-Control-Max-Age":       "60",
+		"Cross-Origin-Resource-Policy": "cross-origin",
+		"Server":                       "go-csp-collector",
+	}
+	for header, want := range cases {
+		if got := rr.Header().Get(header); got != want {
+			t.Errorf("expected %s=%q, got %q", header, want, got)
+		}
+	}
+	if body := rr.Body.String(); body != "OK" {
+		t.Errorf("expected body %q, got %q", "OK", body)
+	}
+}
+
+func TestReportAPICorsHandlerPreflightDefaultsWithoutRequestHeaders(t *testing.T) {
+	req := httptest.NewRequest("OPTIONS", "/reporting-api/csp", nil)
+	rr := httptest.NewRecorder()
+
+	ReportAPICorsHandler(rr, req)
+
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("expected wildcard origin with no Origin header, got %q", got)
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Methods"); got != "*" {
+		t.Errorf("expected wildcard methods with no requested method, got %q", got)
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Headers"); got != "*" {
+		t.Errorf("expected wildcard headers with no requested headers, got %q", got)
 	}
 }
