@@ -35,11 +35,7 @@ type NELReportBody struct {
 	Type             string  `json:"type"`
 }
 
-// NewNELHandler builds a NEL report handler on top of the shared
-// BatchReportHandler. reportOnly and truncateQueryStringFragment are
-// closed over rather than stored as their own fields on the generic type,
-// since they only affect the type-specific Process/Validate callbacks, not
-// anything the generic wrapper does itself.
+// NewNELHandler builds a NEL report handler on BatchReportHandler.
 func NewNELHandler(reportOnly, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *log.Logger, m *metrics.Metrics) http.Handler {
 	return &BatchReportHandler[NELReport]{
 		HandlerName:          "nel",
@@ -62,10 +58,7 @@ func NewNELHandler(reportOnly, truncateQueryStringFragment, logClientIP, logTrun
 			return "", nil
 		},
 
-		// NEL has its own dedicated metric (NELReports, labeled only by
-		// mode), not the shared Reports counter every other handler uses.
-		// Without these overrides, porting NEL onto this generic type
-		// would silently stop incrementing csp_collector_nel_reports_total.
+		// NEL keeps its own dedicated metric, not the shared Reports counter.
 		RecordSuccessMetric: func(mode string) {
 			if m != nil {
 				m.NELReports.WithLabelValues(mode).Inc()

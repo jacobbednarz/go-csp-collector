@@ -34,18 +34,7 @@ type ReportAPIViolation struct {
 	StatusCode         int    `json:"statusCode"`
 }
 
-// NewReportAPICSPHandler builds the reporting-api/csp handler on top of the
-// shared BatchReportHandler. This is the hardest case the generic type has
-// been tried against: unlike NEL's single rejection reason, Validate here
-// can reject for three different reasons (blocked_uri, blocked_domain,
-// validation_error), and the first two need to land on a different metric
-// object (ReportFiltered) than the third (ReportErrors), which is exactly
-// what RecordValidationErrorMetric exists for. Porting this handler also
-// confirms the per-item resilient decode the generic type always does (the
-// #172 fix) composes cleanly with a whole-batch Validate rejection:
-// individual malformed items are skipped and logged before Validate ever
-// sees the survivors, rather than failing the whole request outright the
-// way the original single-shot decode did.
+// NewReportAPICSPHandler builds the reporting-api/csp handler on BatchReportHandler.
 func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *log.Logger, m *metrics.Metrics) http.Handler {
 	return &BatchReportHandler[ReportAPIReport]{
 		HandlerName:          "reporting_api_csp",
@@ -128,10 +117,8 @@ func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryS
 	}
 }
 
-// setCORSResponseHeaders sets the CORS headers needed for the browser to
-// accept the actual response to a cross-origin request, not just its
-// preflight. Shared with ReportAPICorsHandler so the preflight and the real
-// response agree on what's allowed.
+// setCORSResponseHeaders is shared with ReportAPICorsHandler so the
+// preflight and the real response agree on what's allowed.
 func setCORSResponseHeaders(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	allow_origin := utils.Ternary(origin != "" && utils.ValidateOrigin(origin), origin, "*")
