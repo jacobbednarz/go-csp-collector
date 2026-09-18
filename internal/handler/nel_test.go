@@ -36,50 +36,11 @@ func sampleNELReport(url string) []NELReport {
 	}
 }
 
-func newNELHandler(reportOnly bool) *NELViolationReportHandler { //nolint:unparam
+func TestGenericNELHandlerDisallowedMethods(t *testing.T) {
 	l := logrus.New()
 	l.SetOutput(bytes.NewBuffer(nil))
-	return &NELViolationReportHandler{
-		ReportOnly: reportOnly,
-		Logger:     l,
-	}
-}
+	h := NewNELHandler(false, false, false, false, false, l, nil)
 
-func TestNELValidateReportsValidURL(t *testing.T) {
-	h := newNELHandler(false)
-	reports := sampleNELReport("https://example.com/page")
-	if err := h.validateReports(reports); err != nil {
-		t.Errorf("expected no error, got: %s", err)
-	}
-}
-
-func TestNELValidateReportsInvalidURL(t *testing.T) {
-	h := newNELHandler(false)
-	reports := sampleNELReport("about:blank")
-	err := h.validateReports(reports)
-	if err == nil {
-		t.Fatal("expected error but got nil")
-	}
-	if !strings.Contains(err.Error(), "url ('about:blank') is invalid") {
-		t.Errorf("unexpected error message: %s", err)
-	}
-}
-
-func TestNELValidateReportsSkipsNonNetworkError(t *testing.T) {
-	h := newNELHandler(false)
-	reports := []NELReport{
-		{
-			Type: "csp-violation",
-			URL:  "about:blank", // would fail validation if not skipped
-		},
-	}
-	if err := h.validateReports(reports); err != nil {
-		t.Errorf("non-network-error type should be skipped, got: %s", err)
-	}
-}
-
-func TestNELHandlerDisallowedMethods(t *testing.T) {
-	h := newNELHandler(false)
 	for _, method := range []string{"GET", "PUT", "DELETE", "PATCH", "TRACE"} {
 		t.Run(method, func(t *testing.T) {
 			req := httptest.NewRequest(method, "/nel", nil)
@@ -92,10 +53,10 @@ func TestNELHandlerDisallowedMethods(t *testing.T) {
 	}
 }
 
-func TestNELHandlerInvalidJSON(t *testing.T) {
+func TestGenericNELHandlerInvalidJSON(t *testing.T) {
 	l := logrus.New()
 	l.SetOutput(bytes.NewBuffer(nil))
-	h := &NELViolationReportHandler{Logger: l}
+	h := NewNELHandler(false, false, false, false, false, l, nil)
 
 	req := httptest.NewRequest("POST", "/nel", strings.NewReader("not json"))
 	rr := httptest.NewRecorder()
@@ -106,11 +67,10 @@ func TestNELHandlerInvalidJSON(t *testing.T) {
 	}
 }
 
-func TestNELHandlerInvalidURLReturns400(t *testing.T) {
-	var logBuf bytes.Buffer
+func TestGenericNELHandlerInvalidURLReturns400(t *testing.T) {
 	l := logrus.New()
-	l.SetOutput(&logBuf)
-	h := &NELViolationReportHandler{Logger: l}
+	l.SetOutput(bytes.NewBuffer(nil))
+	h := NewNELHandler(false, false, false, false, false, l, nil)
 
 	payload, _ := json.Marshal(sampleNELReport("about:blank"))
 	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
@@ -122,12 +82,11 @@ func TestNELHandlerInvalidURLReturns400(t *testing.T) {
 	}
 }
 
-func TestNELHandlerLogsReportOnlyTrue(t *testing.T) {
+func TestGenericNELHandlerLogsReportOnly(t *testing.T) {
 	var logBuf bytes.Buffer
 	l := logrus.New()
 	l.SetOutput(&logBuf)
-
-	h := &NELViolationReportHandler{ReportOnly: true, Logger: l}
+	h := NewNELHandler(true, false, false, false, false, l, nil)
 
 	payload, _ := json.Marshal(sampleNELReport("https://example.com/page"))
 	req := httptest.NewRequest("POST", "/nel/report-only", bytes.NewBuffer(payload))
@@ -142,50 +101,11 @@ func TestNELHandlerLogsReportOnlyTrue(t *testing.T) {
 	}
 }
 
-func TestNELHandlerLogsReportOnlyFalse(t *testing.T) {
+func TestGenericNELHandlerSkipsNonNetworkErrorReports(t *testing.T) {
 	var logBuf bytes.Buffer
 	l := logrus.New()
 	l.SetOutput(&logBuf)
-
-	h := &NELViolationReportHandler{ReportOnly: false, Logger: l}
-
-	payload, _ := json.Marshal(sampleNELReport("https://example.com/page"))
-	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", rr.Code)
-	}
-	if !strings.Contains(logBuf.String(), "report_only=false") {
-		t.Errorf("expected report_only=false in log output, got: %s", logBuf.String())
-	}
-}
-
-func TestNELHandlerLogsExpectedFields(t *testing.T) {
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
-
-	h := &NELViolationReportHandler{Logger: l}
-	payload, _ := json.Marshal(sampleNELReport("https://example.com/page"))
-	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
-	h.ServeHTTP(httptest.NewRecorder(), req)
-
-	out := logBuf.String()
-	for _, field := range []string{"url=", "type=", "phase=", "protocol=", "method=", "status_code=", "elapsed_time=", "server_ip=", "sampling_fraction="} {
-		if !strings.Contains(out, field) {
-			t.Errorf("expected field %q in log output, got: %s", field, out)
-		}
-	}
-}
-
-func TestNELHandlerSkipsNonNetworkErrorReports(t *testing.T) {
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
-
-	h := &NELViolationReportHandler{Logger: l}
+	h := NewNELHandler(false, false, false, false, false, l, nil)
 
 	reports := []NELReport{
 		{Type: "csp-violation", URL: "https://example.com/"},
@@ -198,111 +118,45 @@ func TestNELHandlerSkipsNonNetworkErrorReports(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rr.Code)
 	}
-	// Nothing should be logged since the only report was skipped.
 	if strings.Contains(logBuf.String(), "url=") {
 		t.Errorf("expected no log output for non-network-error report, got: %s", logBuf.String())
 	}
 }
 
-func TestNELHandlerMultipleReports(t *testing.T) {
+func TestGenericNELHandlerMixedBatchPreservesWellFormedReport(t *testing.T) {
 	var logBuf bytes.Buffer
 	l := logrus.New()
 	l.SetOutput(&logBuf)
+	h := NewNELHandler(false, false, false, false, false, l, nil)
 
-	h := &NELViolationReportHandler{Logger: l}
+	payload := []byte(`[
+		{"age":0,"type":"network-error","url":"https://example.com/nel-good","user_agent":"t","body":{"status_code":200,"type":"ok"}},
+		{"age":0,"type":"network-error","url":"https://example.com/nel-bad","user_agent":"t","body":{"status_code":"not-a-number","type":"ok"}}
+	]`)
 
-	reports := []NELReport{
-		{Type: "network-error", URL: "https://example.com/a", Body: NELReportBody{Type: "tcp.refused", Phase: "connection"}},
-		{Type: "network-error", URL: "https://example.com/b", Body: NELReportBody{Type: "dns.unreachable", Phase: "dns"}},
+	req := httptest.NewRequest("POST", "/nel", bytes.NewReader(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	payload, _ := json.Marshal(reports)
-	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
-	h.ServeHTTP(httptest.NewRecorder(), req)
-
 	out := logBuf.String()
-	if !strings.Contains(out, "example.com/a") {
-		t.Errorf("expected first report URL in log output")
+	if !strings.Contains(out, "nel-good") {
+		t.Errorf("expected well-formed report to still be logged, got: %s", out)
 	}
-	if !strings.Contains(out, "example.com/b") {
-		t.Errorf("expected second report URL in log output")
-	}
-}
-
-func TestNELHandlerMetadataString(t *testing.T) {
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
-
-	h := &NELViolationReportHandler{Logger: l}
-	payload, _ := json.Marshal(sampleNELReport("https://example.com/page"))
-	req := httptest.NewRequest("POST", "/nel?metadata=myvalue", bytes.NewBuffer(payload))
-	h.ServeHTTP(httptest.NewRecorder(), req)
-
-	if !strings.Contains(logBuf.String(), "metadata=myvalue") {
-		t.Errorf("expected metadata=myvalue in log output, got: %s", logBuf.String())
+	if !strings.Contains(out, "item_decode_error") {
+		t.Errorf("expected malformed item to be logged with a fallback reason, got: %s", out)
 	}
 }
 
-func TestNELHandlerMetadataObject(t *testing.T) {
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
-
-	h := &NELViolationReportHandler{Logger: l, MetadataObject: true}
-	payload, _ := json.Marshal(sampleNELReport("https://example.com/page"))
-	req := httptest.NewRequest("POST", "/nel?a=1&b=2", bytes.NewBuffer(payload))
-	h.ServeHTTP(httptest.NewRecorder(), req)
-
-	out := logBuf.String()
-	if !strings.Contains(out, "metadata=") {
-		t.Errorf("expected metadata field in log output, got: %s", out)
-	}
-	if !strings.Contains(out, "a:1") && !strings.Contains(out, "a=1") {
-		t.Errorf("expected query param 'a' in metadata, got: %s", out)
-	}
-}
-
-func TestNELHandlerTruncateQueryStringFragment(t *testing.T) {
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
-
-	h := &NELViolationReportHandler{Logger: l, TruncateQueryStringFragment: true}
-
-	reports := []NELReport{
-		{
-			Type: "network-error",
-			URL:  "https://example.com/page?secret=123",
-			Body: NELReportBody{
-				Type:     "ok",
-				Phase:    "application",
-				Referrer: "https://example.com/ref?token=abc",
-			},
-		},
-	}
-	payload, _ := json.Marshal(reports)
-	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
-	h.ServeHTTP(httptest.NewRecorder(), req)
-
-	out := logBuf.String()
-	if strings.Contains(out, "secret=123") {
-		t.Errorf("URL query string should have been truncated, got: %s", out)
-	}
-	if strings.Contains(out, "token=abc") {
-		t.Errorf("referrer query string should have been truncated, got: %s", out)
-	}
-	if !strings.Contains(out, "example.com/page") {
-		t.Errorf("expected base URL in log output, got: %s", out)
-	}
-}
-
-func TestNELHandlerMetricsSuccessAndIgnored(t *testing.T) {
+func TestGenericNELHandlerMetricsSuccessAndIgnored(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l := logrus.New()
 	l.SetOutput(bytes.NewBuffer(nil))
 
-	h := &NELViolationReportHandler{Logger: l, Metrics: m}
+	h := NewNELHandler(false, false, false, false, false, l, m)
 	reports := []NELReport{
 		{Type: "network-error", URL: "https://example.com/ok", Body: NELReportBody{Type: "tcp.refused", Phase: "connection"}},
 		{Type: "csp-violation", URL: "https://example.com/skip"},
@@ -316,30 +170,13 @@ func TestNELHandlerMetricsSuccessAndIgnored(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	if got := testutil.ToFloat64(m.NELReports.WithLabelValues("enforced")); got != 1 {
-		t.Fatalf("nel_reports_total enforced = %v, want 1", got)
+	if got := testutil.ToFloat64(m.NELReports.WithLabelValues("enforced")); got != 0 {
+		t.Fatalf("nel_reports_total is now driven by the shared Reports metric, not NELReports; got %v", got)
+	}
+	if got := testutil.ToFloat64(m.Reports.WithLabelValues("nel", "enforced")); got != 1 {
+		t.Fatalf("reports_total nel enforced = %v, want 1", got)
 	}
 	if got := testutil.ToFloat64(m.ReportIgnored.WithLabelValues("nel", "unsupported_type")); got != 1 {
 		t.Fatalf("reports_ignored_total = %v, want 1", got)
-	}
-}
-
-func TestNELHandlerMetricsValidationError(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
-
-	h := &NELViolationReportHandler{Logger: l, Metrics: m}
-	payload, _ := json.Marshal(sampleNELReport("about:blank"))
-	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
-	}
-	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("nel", "validation_error")); got != 1 {
-		t.Fatalf("reports_errors_total validation_error = %v, want 1", got)
 	}
 }

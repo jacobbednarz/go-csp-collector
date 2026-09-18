@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -21,6 +20,8 @@ type NELReport struct {
 	UserAgent string        `json:"user_agent"`
 }
 
+func (r NELReport) ReportType() string { return r.Type }
+
 // NELReportBody contains the fields nested within each NEL report.
 type NELReportBody struct {
 	ElapsedTime      int     `json:"elapsed_time"`
@@ -34,130 +35,64 @@ type NELReportBody struct {
 	Type             string  `json:"type"`
 }
 
-// NELViolationReportHandler handles incoming NEL reports.
-type NELViolationReportHandler struct {
-	ReportOnly                  bool
-	TruncateQueryStringFragment bool
+// NewNELHandler builds a NEL report handler on top of the shared
+// BatchReportHandler. reportOnly and truncateQueryStringFragment are
+// closed over rather than stored as their own fields on the generic type,
+// since they only affect the type-specific Process/Validate callbacks, not
+// anything the generic wrapper does itself.
+func NewNELHandler(reportOnly, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *log.Logger, m *metrics.Metrics) http.Handler {
+	return &BatchReportHandler[NELReport]{
+		HandlerName:          "nel",
+		ExpectedType:         "network-error",
+		MetadataObject:       metadataObject,
+		LogClientIP:          logClientIP,
+		LogTruncatedClientIP: logTruncatedClientIP,
+		Logger:               logger,
+		Metrics:              m,
 
-	LogClientIP          bool
-	LogTruncatedClientIP bool
-	MetadataObject       bool
-
-	Logger  *log.Logger
-	Metrics *metrics.Metrics
-}
-
-func (h *NELViolationReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
-	decoder := json.NewDecoder(r.Body)
-	var reports []NELReport
-
-	err := decoder.Decode(&reports)
-	if err != nil {
-		if h.Metrics != nil {
-			h.Metrics.ReportErrors.WithLabelValues("nel", "decode_error").Inc()
-		}
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.Logger.Debugf("unable to decode invalid JSON payload: %s", err)
-		return
-	}
-
-	defer r.Body.Close()
-
-	if err := h.validateReports(reports); err != nil {
-		if h.Metrics != nil {
-			h.Metrics.ReportErrors.WithLabelValues("nel", "validation_error").Inc()
-		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		h.Logger.Debugf("received invalid payload: %s", err.Error())
-		return
-	}
-
-	var metadata interface{}
-	if h.MetadataObject {
-		metadataMap := make(map[string]string)
-		for k, v := range r.URL.Query() {
-			metadataMap[k] = v[0]
-		}
-		metadata = metadataMap
-	} else {
-		if metadatas, ok := r.URL.Query()["metadata"]; ok {
-			metadata = metadatas[0]
-		}
-	}
-
-	for _, report := range reports {
-		if report.Type != "network-error" {
-			if h.Metrics != nil {
-				h.Metrics.ReportIgnored.WithLabelValues("nel", "unsupported_type").Inc()
+		Validate: func(items []NELReport) error {
+			for _, report := range items {
+				if report.Type != "network-error" {
+					continue
+				}
+				if !strings.HasPrefix(report.URL, "http") {
+					return fmt.Errorf("url ('%s') is invalid", report.URL)
+				}
 			}
-			continue
-		}
+			return nil
+		},
 
-		url := report.URL
-		referrer := report.Body.Referrer
-		if h.TruncateQueryStringFragment {
-			url = utils.TruncateQueryStringFragment(url)
-			referrer = utils.TruncateQueryStringFragment(referrer)
-		}
-
-		lf := log.Fields{
-			"report_only":       h.ReportOnly,
-			"url":               url,
-			"referrer":          referrer,
-			"type":              report.Body.Type,
-			"phase":             report.Body.Phase,
-			"protocol":          report.Body.Protocol,
-			"method":            report.Body.Method,
-			"status_code":       report.Body.StatusCode,
-			"elapsed_time":      report.Body.ElapsedTime,
-			"server_ip":         report.Body.ServerIP,
-			"sampling_fraction": report.Body.SamplingFraction,
-			"metadata":          metadata,
-			"path":              r.URL.Path,
-		}
-
-		if h.LogClientIP {
-			ip, err := utils.GetClientIP(r)
-			if err != nil {
-				h.Logger.Warnf("unable to parse client ip: %s", err)
-			} else {
-				lf["client_ip"] = ip.String()
+		Process: func(report NELReport, r *http.Request, metadata interface{}) ProcessResult {
+			url := report.URL
+			referrer := report.Body.Referrer
+			if truncateQueryStringFragment {
+				url = utils.TruncateQueryStringFragment(url)
+				referrer = utils.TruncateQueryStringFragment(referrer)
 			}
-		}
 
-		if h.LogTruncatedClientIP {
-			ip, err := utils.GetClientIP(r)
-			if err != nil {
-				h.Logger.Warnf("unable to parse client ip: %s", err)
-			} else {
-				lf["client_ip"] = utils.TruncateClientIP(ip)
-			}
-		}
-
-		h.Logger.WithFields(lf).Info()
-		if h.Metrics != nil {
 			mode := "enforced"
-			if h.ReportOnly {
+			if reportOnly {
 				mode = "report_only"
 			}
-			h.Metrics.NELReports.WithLabelValues(mode).Inc()
-		}
-	}
-}
 
-func (h *NELViolationReportHandler) validateReports(reports []NELReport) error {
-	for _, report := range reports {
-		if report.Type != "network-error" {
-			continue
-		}
-		if !strings.HasPrefix(report.URL, "http") {
-			return fmt.Errorf("url ('%s') is invalid", report.URL)
-		}
+			return ProcessResult{
+				Fields: log.Fields{
+					"report_only":       reportOnly,
+					"url":               url,
+					"referrer":          referrer,
+					"type":              report.Body.Type,
+					"phase":             report.Body.Phase,
+					"protocol":          report.Body.Protocol,
+					"method":            report.Body.Method,
+					"status_code":       report.Body.StatusCode,
+					"elapsed_time":      report.Body.ElapsedTime,
+					"server_ip":         report.Body.ServerIP,
+					"sampling_fraction": report.Body.SamplingFraction,
+					"metadata":          metadata,
+					"path":              r.URL.Path,
+				},
+				Mode: mode,
+			}
+		},
 	}
-	return nil
 }
