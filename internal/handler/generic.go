@@ -11,56 +11,35 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// ReportTyped is implemented by any report struct that can report its own
-// Reporting API `type` field, so the generic handler can decide whether to
-// process or skip an item without needing type-specific code.
+// ReportTyped lets the handler check a decoded item's Reporting API `type`
+// without type-specific code.
 type ReportTyped interface {
 	ReportType() string
 }
 
-// ProcessResult is what a type-specific Process function returns for one
-// successfully decoded report.
+// ProcessResult is what Process returns for one successfully decoded report.
 type ProcessResult struct {
 	Fields log.Fields
-	// Mode is the second Prometheus label for a successfully processed
-	// report (e.g. "enforced" / "report_only"). Handlers that don't have
-	// this concept (default.go's catch-all) can put whatever they want
-	// here, such as the report's own type.
-	Mode string
+	Mode   string // second Prometheus label, e.g. "enforced" / "report_only"
 }
 
-// BatchReportHandler provides the boilerplate shared by every array-based,
-// per-item report endpoint: method check, resilient per-item decode
-// (matching the #172 fix), metadata handling, client IP logging, and
-// metrics. Only the type-specific field extraction is supplied by the
-// caller.
-//
-// This covers every array-based report endpoint (NEL, COOP, COEP, default,
-// reporting-api/csp) and, with AllowSingleObject, CSP's legacy report-uri
-// endpoint too, which POSTs a single un-batched object rather than an
-// array.
+// BatchReportHandler is the shared implementation behind every report
+// endpoint: method check, resilient per-item decode, validation, metadata,
+// client IP, and metrics. Type-specific behavior is supplied via the
+// closures below.
 type BatchReportHandler[T ReportTyped] struct {
 	HandlerName    string
 	ExpectedType   string
 	MetadataObject bool
 
-	// AllowSingleObject, if set, makes a request body that is valid JSON
-	// but not a top-level array get treated as a single-item batch instead
-	// of being rejected as a decode error. This exists for CSP's legacy
-	// report-uri delivery, which predates the Reporting API and always
-	// POSTs exactly one un-batched report per violation
-	// (`{"csp-report": {...}}`), never an array. Every other handler in
-	// this codebase was specified after the Reporting API existed and only
-	// ever receives arrays, so this defaults to false and their existing
-	// strict-array behavior (a bare object still 422s) is unchanged.
+	// AllowSingleObject accepts a body that's valid JSON but not a
+	// top-level array as a single-item batch instead of a decode error.
+	// Needed for CSP's legacy report-uri delivery, which predates the
+	// Reporting API and always POSTs one un-batched object. Everything
+	// else only ever sends arrays, so this defaults to false.
 	//
-	// One deliberate side effect: with this set, an endpoint that used to
-	// only ever accept a single object will now also accept a genuine JSON
-	// array of several objects in one request, processing each as its own
-	// report. The old single-object decoder would have rejected that shape
-	// outright (a decode error, since a struct can't unmarshal from a JSON
-	// array). This is a real, noted behavior change from the original
-	// legacy handler, not an oversight.
+	// Side effect: an endpoint using this also now accepts a genuine array
+	// of several objects, which the old single-object decoder rejected.
 	AllowSingleObject bool
 
 	LogClientIP          bool
@@ -69,55 +48,30 @@ type BatchReportHandler[T ReportTyped] struct {
 	Logger  *log.Logger
 	Metrics *metrics.Metrics
 
-	// Validate, if set, runs once against every successfully decoded item
-	// before any of them are processed. Returning a non-nil error rejects
-	// the whole request with 400 and logs nothing, matching NEL's existing
-	// validateReports behavior. reason is the metric label to increment on
-	// rejection, so a handler with more than one rejection cause (CSP's
-	// blocked_uri vs blocked_domain vs validation_error, each hitting a
-	// different metric) can still be told apart, not just a single
-	// "validation_error" for everything. NEL, which only ever has one
-	// rejection cause, just always returns "validation_error" here.
+	// Validate runs once against all decoded items before any are
+	// processed; a non-nil error rejects the whole request with 400.
+	// reason is the metric label for the rejection cause.
 	Validate func(items []T) (reason string, err error)
 
-	// Process turns one successfully decoded, type-matched report into log
-	// fields and a metrics mode. Truncation, if any, is the caller's
-	// responsibility here, since which fields need truncating varies by
-	// type (NEL truncates url/referrer, COOP truncates opener_url/
-	// referrer/source_file, CSP truncates yet another set).
+	// Process turns one decoded, type-matched report into log fields and a
+	// metrics mode. Field truncation is the caller's responsibility.
 	Process func(report T, r *http.Request, metadata interface{}) ProcessResult
 
-	// RecordSuccessMetric, if set, is called instead of the default
-	// Metrics.Reports.WithLabelValues(HandlerName, mode) increment. This
-	// exists because NEL has its own dedicated NELReports metric (labeled
-	// only by mode, no handler label), separate from the shared Reports
-	// counter CSP and reporting-api/csp use. Without this hook, porting
-	// NEL onto this type would silently stop incrementing
-	// csp_collector_nel_reports_total and start incrementing a
-	// differently-shaped metric instead, a real breaking change for
-	// anyone scraping the old name, found only by actually trying the
-	// port, not by designing this type up front.
+	// RecordSuccessMetric overrides the default
+	// Reports.WithLabelValues(HandlerName, mode) increment, for handlers
+	// with their own dedicated metric (e.g. NEL's NELReports).
 	RecordSuccessMetric func(mode string)
 
-	// RecordValidationErrorMetric works the same way, for the rejection
-	// path Validate triggers. Optional; if unset, the default
-	// ReportErrors.WithLabelValues(HandlerName, reason) increment is used.
-	// reporting-api/csp needs this override for real, not just for
-	// consistency: its blocked_uri and blocked_domain rejections
-	// increment a completely different metric, ReportFiltered, not
-	// ReportErrors with a different label. A single default label choice
-	// cannot represent that on its own.
+	// RecordValidationErrorMetric overrides the default
+	// ReportErrors.WithLabelValues(HandlerName, reason) increment on a
+	// Validate rejection, for handlers whose rejection reasons span more
+	// than one metric object (e.g. CSP's blocked_uri/blocked_domain vs.
+	// validation_error).
 	RecordValidationErrorMetric func(reason string)
 
-	// SetResponseHeaders, if set, runs first, before the method check, so
-	// it applies to every response this handler can produce (200, 400,
-	// 422, 405 alike). This exists for reporting-api/csp: its OPTIONS
-	// preflight (ReportAPICorsHandler) has always advertised the
-	// requesting origin as allowed, but the actual POST response never
-	// carried any CORS headers of its own, so browsers rejected real
-	// report deliveries client-side as a CORS failure even though the
-	// server received and logged them correctly. Optional because no
-	// other handler in this codebase needs it.
+	// SetResponseHeaders runs first, before the method check, so it
+	// applies to every response. Used by reporting-api/csp to set CORS
+	// headers on the actual response, not just the OPTIONS preflight.
 	SetResponseHeaders func(w http.ResponseWriter, r *http.Request)
 }
 
@@ -146,11 +100,7 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 	if err := json.Unmarshal(body, &rawItems); err != nil {
 		var typeErr *json.UnmarshalTypeError
 		if h.AllowSingleObject && errors.As(err, &typeErr) {
-			// Valid JSON, just not a top-level array - treat the whole body
-			// as a single-item batch rather than rejecting it. A genuinely
-			// malformed body (a json.SyntaxError, e.g. non-JSON text) still
-			// falls through to the decode_error path below regardless of
-			// this flag.
+			// Valid JSON, just not an array - treat it as one item.
 			rawItems = []json.RawMessage{json.RawMessage(body)}
 		} else {
 			if h.Metrics != nil {
@@ -214,8 +164,6 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 		result := h.Process(item, r, metadata)
 
 		if h.LogClientIP || h.LogTruncatedClientIP {
-			// Shared across every handler that supports it today, unlike
-			// truncation this part genuinely doesn't vary by type.
 			addClientIPField(result.Fields, r, h.LogClientIP, h.LogTruncatedClientIP, h.Logger)
 		}
 
