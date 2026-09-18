@@ -51,14 +51,15 @@ type BatchReportHandler[T ReportTyped] struct {
 	Metrics *metrics.Metrics
 
 	// Validate, if set, runs once against every successfully decoded item
-	// before any of them are processed. Returning an error rejects the
-	// whole request with 400 and logs nothing, matching NEL's existing
-	// validateReports behavior (e.g. rejecting a batch containing a
-	// non-http URL). This was not part of the first version of this type;
-	// it turned out to be needed once NEL was actually ported onto it,
-	// since NEL already had this exact whole-batch-reject behavior
-	// alongside its per-item type skip, not just the per-item skip alone.
-	Validate func(items []T) error
+	// before any of them are processed. Returning a non-nil error rejects
+	// the whole request with 400 and logs nothing, matching NEL's existing
+	// validateReports behavior. reason is the metric label to increment on
+	// rejection, so a handler with more than one rejection cause (CSP's
+	// blocked_uri vs blocked_domain vs validation_error, each hitting a
+	// different metric) can still be told apart, not just a single
+	// "validation_error" for everything. NEL, which only ever has one
+	// rejection cause, just always returns "validation_error" here.
+	Validate func(items []T) (reason string, err error)
 
 	// Process turns one successfully decoded, type-matched report into log
 	// fields and a metrics mode. Truncation, if any, is the caller's
@@ -66,6 +67,28 @@ type BatchReportHandler[T ReportTyped] struct {
 	// type (NEL truncates url/referrer, COOP truncates opener_url/
 	// referrer/source_file, CSP truncates yet another set).
 	Process func(report T, r *http.Request, metadata interface{}) ProcessResult
+
+	// RecordSuccessMetric, if set, is called instead of the default
+	// Metrics.Reports.WithLabelValues(HandlerName, mode) increment. This
+	// exists because NEL has its own dedicated NELReports metric (labeled
+	// only by mode, no handler label), separate from the shared Reports
+	// counter CSP and reporting-api/csp use. Without this hook, porting
+	// NEL onto this type would silently stop incrementing
+	// csp_collector_nel_reports_total and start incrementing a
+	// differently-shaped metric instead, a real breaking change for
+	// anyone scraping the old name, found only by actually trying the
+	// port, not by designing this type up front.
+	RecordSuccessMetric func(mode string)
+
+	// RecordValidationErrorMetric works the same way, for the rejection
+	// path Validate triggers. Optional; if unset, the default
+	// ReportErrors.WithLabelValues(HandlerName, reason) increment is used.
+	// reporting-api/csp needs this override for real, not just for
+	// consistency: its blocked_uri and blocked_domain rejections
+	// increment a completely different metric, ReportFiltered, not
+	// ReportErrors with a different label. A single default label choice
+	// cannot represent that on its own.
+	RecordValidationErrorMetric func(reason string)
 }
 
 func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -105,9 +128,11 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 
 	if h.Validate != nil {
-		if err := h.Validate(items); err != nil {
-			if h.Metrics != nil {
-				h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "validation_error").Inc()
+		if reason, err := h.Validate(items); err != nil {
+			if h.RecordValidationErrorMetric != nil {
+				h.RecordValidationErrorMetric(reason)
+			} else if h.Metrics != nil {
+				h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, reason).Inc()
 			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			h.Logger.Debugf("received invalid payload: %s", err.Error())
@@ -143,7 +168,9 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 		}
 
 		h.Logger.WithFields(result.Fields).Info()
-		if h.Metrics != nil {
+		if h.RecordSuccessMetric != nil {
+			h.RecordSuccessMetric(result.Mode)
+		} else if h.Metrics != nil {
 			h.Metrics.Reports.WithLabelValues(h.HandlerName, result.Mode).Inc()
 		}
 	}

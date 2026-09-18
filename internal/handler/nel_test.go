@@ -170,11 +170,11 @@ func TestGenericNELHandlerMetricsSuccessAndIgnored(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	if got := testutil.ToFloat64(m.NELReports.WithLabelValues("enforced")); got != 0 {
-		t.Fatalf("nel_reports_total is now driven by the shared Reports metric, not NELReports; got %v", got)
+	if got := testutil.ToFloat64(m.NELReports.WithLabelValues("enforced")); got != 1 {
+		t.Fatalf("nel_reports_total enforced = %v, want 1 (RecordSuccessMetric should preserve the legacy metric name)", got)
 	}
-	if got := testutil.ToFloat64(m.Reports.WithLabelValues("nel", "enforced")); got != 1 {
-		t.Fatalf("reports_total nel enforced = %v, want 1", got)
+	if got := testutil.ToFloat64(m.Reports.WithLabelValues("nel", "enforced")); got != 0 {
+		t.Fatalf("reports_total nel enforced = %v, want 0 (NEL should not double-record onto the shared metric)", got)
 	}
 	if got := testutil.ToFloat64(m.ReportIgnored.WithLabelValues("nel", "unsupported_type")); got != 1 {
 		t.Fatalf("reports_ignored_total = %v, want 1", got)
