@@ -265,6 +265,64 @@ func TestGenericReportAPICSPHandlerMetadata(t *testing.T) {
 	}
 }
 
+func TestGenericReportAPICSPHandlerSetsCORSHeaderOnActualResponse(t *testing.T) {
+	// The OPTIONS preflight (ReportAPICorsHandler) has always advertised
+	// the requesting origin as allowed, but the actual POST response never
+	// carried any CORS headers of its own. Browsers apply the CORS check
+	// to the real response too, not just the preflight, so this caused
+	// real report deliveries to be rejected client-side as a CORS failure
+	// even though the server received and logged them successfully.
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, nil)
+	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/app.js","documentURL":"https://example.com","disposition":"report"}}]`)
+	req := httptest.NewRequest("POST", "/reporting-api/csp", bytes.NewBuffer(body))
+	req.Header.Set("Origin", "https://example.com")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "https://example.com" {
+		t.Errorf("expected Access-Control-Allow-Origin to echo the request origin, got %q", got)
+	}
+}
+
+func TestGenericReportAPICSPHandlerCORSHeaderPresentOnErrorResponses(t *testing.T) {
+	// The CORS header needs to be on every response the handler can
+	// produce, not just the 200 path - a browser applies its CORS check
+	// regardless of status code.
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, nil)
+	req := httptest.NewRequest("POST", "/reporting-api/csp", strings.NewReader("not json"))
+	req.Header.Set("Origin", "https://example.com")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", rr.Code)
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "https://example.com" {
+		t.Errorf("expected Access-Control-Allow-Origin on the 422 response too, got %q", got)
+	}
+}
+
+func TestGenericReportAPICSPHandlerCORSFallsBackToWildcardWithNoOrigin(t *testing.T) {
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, nil)
+	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/app.js","documentURL":"https://example.com","disposition":"report"}}]`)
+	req := httptest.NewRequest("POST", "/reporting-api/csp", bytes.NewBuffer(body))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("expected wildcard Access-Control-Allow-Origin with no Origin header, got %q", got)
+	}
+}
+
 func TestGenericReportAPICSPHandlerJSONUnmarshal(t *testing.T) {
 	rawReport := []byte(`{"type":"csp-violation","body":{"blockedURL":"inline"}}`)
 	var report ReportAPIReport

@@ -56,6 +56,8 @@ func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryS
 		Logger:               logger,
 		Metrics:              m,
 
+		SetResponseHeaders: setCORSResponseHeaders,
+
 		Validate: func(items []ReportAPIReport) (string, error) {
 			for _, violation := range items {
 				if violation.Type != "csp-violation" {
@@ -126,16 +128,26 @@ func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryS
 	}
 }
 
-func ReportAPICorsHandler(w http.ResponseWriter, r *http.Request) {
+// setCORSResponseHeaders sets the CORS headers needed for the browser to
+// accept the actual response to a cross-origin request, not just its
+// preflight. Shared with ReportAPICorsHandler so the preflight and the real
+// response agree on what's allowed.
+func setCORSResponseHeaders(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
+	allow_origin := utils.Ternary(origin != "" && utils.ValidateOrigin(origin), origin, "*")
+	w.Header().Set("Access-Control-Allow-Origin", allow_origin)
+	w.Header().Set("vary", "Origin")
+}
+
+func ReportAPICorsHandler(w http.ResponseWriter, r *http.Request) {
+	setCORSResponseHeaders(w, r)
+
 	method := r.Header.Get("Access-Control-Request-Method")
 	header := r.Header.Get("Access-Control-Request-Headers")
-	allow_origin := utils.Ternary(origin != "" && utils.ValidateOrigin(origin), origin, "*")
 	allow_method := utils.Ternary(method != "", method, "*")
 	allow_header := utils.Ternary(header != "", header, "*")
 	// Special handling due to bug in Chrome
 	// https://bugs.chromium.org/p/chromium/issues/detail?id=1152867
-	w.Header().Set("Access-Control-Allow-Origin", allow_origin)
 	w.Header().Set("Access-Control-Allow-Methods", allow_method)
 	w.Header().Set("Access-Control-Max-Age", "60")
 	w.Header().Set("Access-Control-Allow-Headers", allow_header)
