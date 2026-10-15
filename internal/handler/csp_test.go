@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -48,7 +46,17 @@ var invalidBlockedURIs = []string{
 	"bdvideo://error",
 }
 
-func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
+func newTestCSPHandler(blockedURIs, blockedDomains []string, l *logrus.Logger, m *metrics.Metrics) http.Handler {
+	return NewCSPHandler(false, blockedURIs, blockedDomains, false, false, false, false, l, m)
+}
+
+func TestCSPReportType(t *testing.T) {
+	if got := (CSPReport{}).ReportType(); got != "csp-violation" {
+		t.Errorf("expected ReportType() to return %q, got %q", "csp-violation", got)
+	}
+}
+
+func TestGenericCSPHandlerInvalidBlockedURIs(t *testing.T) {
 	for _, blockedURI := range invalidBlockedURIs {
 		// Makes the test name more readable for the output.
 		testName := strings.ReplaceAll(blockedURI, "://", "")
@@ -61,26 +69,27 @@ func TestValidateViolationWithInvalidBlockedURIs(t *testing.T) {
 				}
 			}`, blockedURI))
 
-			var report CSPReport
-			jsonErr := json.Unmarshal(rawReport, &report)
-			if jsonErr != nil {
-				fmt.Println("error:", jsonErr)
+			l := logrus.New()
+			l.SetOutput(bytes.NewBuffer(nil))
+			h := newTestCSPHandler(invalidBlockedURIs, nil, l, nil)
+
+			req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(rawReport))
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d", rr.Code)
 			}
 
-			cspViolationHandler := &CSPViolationReportHandler{BlockedURIs: invalidBlockedURIs}
-			validateErr := cspViolationHandler.validateViolation(report)
-			if validateErr == nil {
-				t.Errorf("expected error to be raised but it didn't")
-			}
-
-			if validateErr.Error() != fmt.Sprintf("blocked URI ('%s') is an invalid resource", blockedURI) {
-				t.Errorf("expected error to include correct message string but it didn't")
+			wantBody := fmt.Sprintf("blocked URI ('%s') is an invalid resource", blockedURI)
+			if strings.TrimSpace(rr.Body.String()) != wantBody {
+				t.Errorf("expected body %q, got %q", wantBody, rr.Body.String())
 			}
 		})
 	}
 }
 
-func TestValidateViolationWithValidBlockedURIs(t *testing.T) {
+func TestGenericCSPHandlerValidBlockedURIs(t *testing.T) {
 	rawReport := []byte(`{
 		"csp-report": {
 			"document-uri": "https://example.com",
@@ -88,35 +97,44 @@ func TestValidateViolationWithValidBlockedURIs(t *testing.T) {
 		}
 	}`)
 
-	var report CSPReport
-	jsonErr := json.Unmarshal(rawReport, &report)
-	if jsonErr != nil {
-		fmt.Println("error:", jsonErr)
-	}
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+	h := newTestCSPHandler(invalidBlockedURIs, nil, l, nil)
 
-	cspViolationHandler := &CSPViolationReportHandler{BlockedURIs: invalidBlockedURIs}
-	validateErr := cspViolationHandler.validateViolation(report)
-	if validateErr != nil {
-		t.Errorf("expected error not be raised")
-	}
-}
+	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(rawReport))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
 
-func TestValidateNonHttpDocumentURI(t *testing.T) {
-	log.SetOutput(io.Discard)
-
-	report := CSPReport{Body: CSPReportBody{
-		BlockedURI:  "http://example.com/",
-		DocumentURI: "about",
-	}}
-
-	cspViolationHandler := &CSPViolationReportHandler{BlockedURIs: invalidBlockedURIs}
-	validateErr := cspViolationHandler.validateViolation(report)
-	if validateErr.Error() != "document URI ('about') is invalid" {
-		t.Errorf("expected error to include correct message string but it didn't")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
-func TestHandlerWithMetadata(t *testing.T) {
+func TestGenericCSPHandlerNonHttpDocumentURI(t *testing.T) {
+	rawReport := []byte(`{
+		"csp-report": {
+			"document-uri": "about",
+			"blocked-uri": "http://example.com/"
+		}
+	}`)
+
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+	h := newTestCSPHandler(invalidBlockedURIs, nil, l, nil)
+
+	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(rawReport))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+	if want := "document URI ('about') is invalid"; strings.TrimSpace(rr.Body.String()) != want {
+		t.Errorf("expected body %q, got %q", want, rr.Body.String())
+	}
+}
+
+func TestGenericCSPHandlerWithMetadata(t *testing.T) {
 	csp := CSPReport{
 		CSPReportBody{
 			DocumentURI: "http://example.com",
@@ -127,9 +145,9 @@ func TestHandlerWithMetadata(t *testing.T) {
 	payload, _ := json.Marshal(csp)
 
 	for _, repeats := range []int{1, 2} {
-		log := logrus.New()
+		l := logrus.New()
 		var logBuffer bytes.Buffer
-		log.SetOutput(&logBuffer)
+		l.SetOutput(&logBuffer)
 
 		url := "/?"
 		for i := 0; i < repeats; i++ {
@@ -142,8 +160,8 @@ func TestHandlerWithMetadata(t *testing.T) {
 		}
 		recorder := httptest.NewRecorder()
 
-		cspViolationHandler := &CSPViolationReportHandler{BlockedURIs: invalidBlockedURIs, Logger: log}
-		cspViolationHandler.ServeHTTP(recorder, request)
+		h := newTestCSPHandler(invalidBlockedURIs, nil, l, nil)
+		h.ServeHTTP(recorder, request)
 
 		response := recorder.Result()
 		defer response.Body.Close()
@@ -162,7 +180,7 @@ func TestHandlerWithMetadata(t *testing.T) {
 	}
 }
 
-func TestHandlerWithMetadataObject(t *testing.T) {
+func TestGenericCSPHandlerWithMetadataObject(t *testing.T) {
 	csp := CSPReport{
 		CSPReportBody{
 			DocumentURI: "http://example.com",
@@ -172,9 +190,9 @@ func TestHandlerWithMetadataObject(t *testing.T) {
 
 	payload, _ := json.Marshal(csp)
 
-	log := logrus.New()
+	l := logrus.New()
 	var logBuffer bytes.Buffer
-	log.SetOutput(&logBuffer)
+	l.SetOutput(&logBuffer)
 
 	request, err := http.NewRequest("POST", "/path?a=b&c=d", bytes.NewBuffer(payload))
 	if err != nil {
@@ -182,8 +200,8 @@ func TestHandlerWithMetadataObject(t *testing.T) {
 	}
 	recorder := httptest.NewRecorder()
 
-	objectHandler := &CSPViolationReportHandler{Logger: log, MetadataObject: true}
-	objectHandler.ServeHTTP(recorder, request)
+	h := NewCSPHandler(false, nil, nil, false, false, false, true, l, nil)
+	h.ServeHTTP(recorder, request)
 
 	response := recorder.Result()
 	defer response.Body.Close()
@@ -198,10 +216,7 @@ func TestHandlerWithMetadataObject(t *testing.T) {
 	}
 }
 
-func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
-	// Discard the output we create from the calls here.
-	log.SetOutput(io.Discard)
-
+func TestGenericCSPHandlerMultipleTypeStatusCode(t *testing.T) {
 	statusCodeValues := []interface{}{"200", 200}
 
 	for _, statusCode := range statusCodeValues {
@@ -224,8 +239,10 @@ func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
 			}
 
 			recorder := httptest.NewRecorder()
-			cspViolationHandler := &CSPViolationReportHandler{BlockedURIs: invalidBlockedURIs, Logger: logrus.New()}
-			cspViolationHandler.ServeHTTP(recorder, request)
+			l := logrus.New()
+			l.SetOutput(bytes.NewBuffer(nil))
+			h := newTestCSPHandler(invalidBlockedURIs, nil, l, nil)
+			h.ServeHTTP(recorder, request)
 
 			response := recorder.Result()
 			defer response.Body.Close()
@@ -237,7 +254,7 @@ func TestHandleViolationReportMultipleTypeStatusCode(t *testing.T) {
 	}
 }
 
-func TestValidateViolationWithSourceFile(t *testing.T) {
+func TestGenericCSPHandlerWithSourceFile(t *testing.T) {
 	rawReport := []byte(`{
 		"csp-report": {
 			"document-uri": "https://example.com",
@@ -249,15 +266,8 @@ func TestValidateViolationWithSourceFile(t *testing.T) {
 	}`)
 
 	var report CSPReport
-	jsonErr := json.Unmarshal(rawReport, &report)
-	if jsonErr != nil {
-		t.Errorf("error: %s", jsonErr)
-	}
-
-	cspViolationHandler := &CSPViolationReportHandler{BlockedURIs: invalidBlockedURIs}
-	validateErr := cspViolationHandler.validateViolation(report)
-	if validateErr != nil {
-		t.Errorf("Unexpected error raised")
+	if err := json.Unmarshal(rawReport, &report); err != nil {
+		t.Fatalf("error: %s", err)
 	}
 	if report.Body.SourceFile == "" {
 		t.Errorf("Violation 'source-file' not found")
@@ -267,6 +277,18 @@ func TestValidateViolationWithSourceFile(t *testing.T) {
 	}
 	if report.Body.ColumnNumber == 0 {
 		t.Errorf("Violation 'column-number' not found")
+	}
+
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+	h := newTestCSPHandler(invalidBlockedURIs, nil, l, nil)
+
+	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(rawReport))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("Unexpected error raised: %d %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -313,26 +335,26 @@ func TestIsBlockedByDomainEmptyList(t *testing.T) {
 	}
 }
 
-func TestValidateViolationWithBlockedDomain(t *testing.T) {
+func TestGenericCSPHandlerBlockedDomain(t *testing.T) {
 	cases := []struct {
 		name       string
 		blockedURI string
-		wantErr    bool
+		wantStatus int
 	}{
 		{
 			name:       "exact domain is blocked",
 			blockedURI: "https://kaspersky-labs.com/script.js",
-			wantErr:    true,
+			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "subdomain is blocked",
 			blockedURI: "https://gc.kis.v2.scr.kaspersky-labs.com/foo",
-			wantErr:    true,
+			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "unrelated domain is allowed",
 			blockedURI: "https://legitimate.example.com/style.css",
-			wantErr:    false,
+			wantStatus: http.StatusOK,
 		},
 	}
 
@@ -345,18 +367,16 @@ func TestValidateViolationWithBlockedDomain(t *testing.T) {
 				}
 			}`, tc.blockedURI)
 
-			var report CSPReport
-			if err := json.Unmarshal([]byte(rawReport), &report); err != nil {
-				t.Fatalf("failed to unmarshal test report: %v", err)
-			}
+			l := logrus.New()
+			l.SetOutput(bytes.NewBuffer(nil))
+			h := newTestCSPHandler(nil, blockedDomains, l, nil)
 
-			handler := &CSPViolationReportHandler{BlockedDomains: blockedDomains}
-			err := handler.validateViolation(report)
-			if tc.wantErr && err == nil {
-				t.Error("expected an error but got nil")
-			}
-			if !tc.wantErr && err != nil {
-				t.Errorf("expected no error but got: %v", err)
+			req := httptest.NewRequest("POST", "/csp", bytes.NewBufferString(rawReport))
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+
+			if rr.Code != tc.wantStatus {
+				t.Errorf("expected status %d, got %d: %s", tc.wantStatus, rr.Code, rr.Body.String())
 			}
 		})
 	}
@@ -369,10 +389,7 @@ func TestCSPHandlerMetricsSuccess(t *testing.T) {
 	l := logrus.New()
 	l.SetOutput(bytes.NewBuffer(nil))
 
-	h := &CSPViolationReportHandler{
-		Logger:  l,
-		Metrics: m,
-	}
+	h := newTestCSPHandler(nil, nil, l, m)
 
 	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(payload))
 	rr := httptest.NewRecorder()
@@ -392,10 +409,7 @@ func TestCSPHandlerMetricsDecodeError(t *testing.T) {
 	l := logrus.New()
 	l.SetOutput(bytes.NewBuffer(nil))
 
-	h := &CSPViolationReportHandler{
-		Logger:  l,
-		Metrics: m,
-	}
+	h := newTestCSPHandler(nil, nil, l, m)
 
 	req := httptest.NewRequest("POST", "/csp", strings.NewReader("bad-json"))
 	rr := httptest.NewRecorder()
@@ -416,11 +430,7 @@ func TestCSPHandlerMetricsFilteredDomain(t *testing.T) {
 	l := logrus.New()
 	l.SetOutput(bytes.NewBuffer(nil))
 
-	h := &CSPViolationReportHandler{
-		Logger:         l,
-		Metrics:        m,
-		BlockedDomains: []string{"example-tracker.com"},
-	}
+	h := newTestCSPHandler(nil, []string{"example-tracker.com"}, l, m)
 
 	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(payload))
 	rr := httptest.NewRecorder()
@@ -431,6 +441,132 @@ func TestCSPHandlerMetricsFilteredDomain(t *testing.T) {
 	}
 	if got := testutil.ToFloat64(m.ReportFiltered.WithLabelValues("csp", "blocked_domain")); got != 1 {
 		t.Fatalf("reports_filtered_total blocked_domain = %v, want 1", got)
+	}
+}
+
+func TestCSPHandlerMetricsFilteredURI(t *testing.T) {
+	payload := []byte(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"inline"}}`)
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := newTestCSPHandler([]string{"inline"}, nil, l, m)
+
+	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.ReportFiltered.WithLabelValues("csp", "blocked_uri")); got != 1 {
+		t.Fatalf("reports_filtered_total blocked_uri = %v, want 1", got)
+	}
+}
+
+func TestCSPHandlerMetricsValidationError(t *testing.T) {
+	payload := []byte(`{"csp-report":{"document-uri":"about:blank","blocked-uri":"https://cdn.example.com/app.js"}}`)
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := newTestCSPHandler(nil, nil, l, m)
+
+	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("csp", "validation_error")); got != 1 {
+		t.Fatalf("reports_errors_total validation_error = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(m.ReportFiltered.WithLabelValues("csp", "validation_error")); got != 0 {
+		t.Fatalf("reports_filtered_total validation_error = %v, want 0", got)
+	}
+}
+
+func TestGenericCSPHandlerReportOnly(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	var logBuffer bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&logBuffer)
+
+	h := NewCSPHandler(true, nil, nil, false, false, false, false, l, m)
+
+	payload := []byte(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/app.js"}}`)
+	req := httptest.NewRequest("POST", "/csp/report-only", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if !strings.Contains(logBuffer.String(), "report_only=true") {
+		t.Errorf("expected report_only=true in log output, got: %s", logBuffer.String())
+	}
+	if got := testutil.ToFloat64(m.Reports.WithLabelValues("csp", "report_only")); got != 1 {
+		t.Fatalf("reports_total report_only = %v, want 1", got)
+	}
+}
+
+func TestGenericCSPHandlerTruncatesQueryStringFragment(t *testing.T) {
+	var logBuffer bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&logBuffer)
+
+	h := NewCSPHandler(false, nil, nil, true, false, false, false, l, nil)
+
+	payload := []byte(`{"csp-report":{"document-uri":"https://example.com/?a=b#frag","referrer":"https://ref.example.com/?a=b#frag","blocked-uri":"https://cdn.example.com/app.js?a=b#frag","source-file":"https://example.com/app.js?a=b#frag"}}`)
+	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	out := logBuffer.String()
+	if strings.Contains(out, "?a=b") || strings.Contains(out, "#frag") {
+		t.Errorf("expected query string and fragment to be truncated from every truncated field, got: %s", out)
+	}
+	if !strings.Contains(out, "document_uri=\"https://example.com/\"") {
+		t.Errorf("expected truncated document_uri, got: %s", out)
+	}
+}
+
+// TestGenericCSPHandlerAcceptsArrayOfReports documents a deliberate behavior
+// change from the original single-object-only CSPViolationReportHandler:
+// AllowSingleObject only changes what happens when the body ISN'T an array,
+// it doesn't stop the handler from accepting one. A genuine JSON array of
+// several csp-report objects now succeeds and processes each entry,
+// something the old decoder (`Decode(&report)` into a single struct) would
+// have rejected outright as a decode error.
+func TestGenericCSPHandlerAcceptsArrayOfReports(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+
+	h := newTestCSPHandler(nil, nil, l, m)
+
+	payload := []byte(`[
+		{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/one.js"}},
+		{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/two.js"}}
+	]`)
+
+	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(payload))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if got := testutil.ToFloat64(m.Reports.WithLabelValues("csp", "enforced")); got != 2 {
+		t.Fatalf("reports_total = %v, want 2", got)
 	}
 }
 

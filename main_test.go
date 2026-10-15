@@ -17,11 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var cspViolationReportHandler = &handler.CSPViolationReportHandler{
-	BlockedURIs:                 utils.DefaultIgnoredBlockedURIs,
-	TruncateQueryStringFragment: false,
-	Logger:                      logrus.New(),
-}
+var cspViolationReportHandler = handler.NewCSPHandler(false, utils.DefaultIgnoredBlockedURIs, nil, false, false, false, false, logrus.New(), nil)
 
 func TestHandlerForDisallowedMethods(t *testing.T) {
 	disallowedMethods := []string{"GET", "DELETE", "PUT", "TRACE", "PATCH"}
