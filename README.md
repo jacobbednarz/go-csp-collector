@@ -69,6 +69,46 @@ Each logged NEL report includes the following fields:
 | `metadata`          | Value of the `metadata` query parameter (if present)     |
 | `path`              | Path of the collector endpoint that received the report  |
 
+#### COOP (Cross-Origin-Opener-Policy)
+
+- `OPTIONS /reporting-api/coop`: CORS preflight handler for the Reporting API.
+- `POST /reporting-api/coop`: accepts [COOP violation reports](https://html.spec.whatwg.org/multipage/browsers.html#coop-reporting) delivered by the Reporting API. Entries with any other `type` are skipped.
+
+COOP reports are sent by Chrome and Safari. Point the `report-to` parameter of
+`Cross-Origin-Opener-Policy` (or `Cross-Origin-Opener-Policy-Report-Only`) at
+an endpoint for this route:
+
+```http
+Reporting-Endpoints: coop-endpoint="https://collector.example.com/reporting-api/coop"
+Cross-Origin-Opener-Policy: same-origin; report-to="coop-endpoint"
+```
+
+There's no separate report-only route, since each report's `disposition` says
+whether it came from the report-only header. Each logged COOP report includes:
+
+| Field                       | Description                                                                 |
+| --------------------------- | --------------------------------------------------------------------------- |
+| `report_only`               | `true` when `disposition` is `reporting`                                    |
+| `url`                       | The URL of the document that generated the report                           |
+| `type`                      | `navigation-to-response`, `navigation-from-response` or `access-to-opener`  |
+| `disposition`               | `enforce` or `reporting`                                                    |
+| `effective_policy`          | The COOP value in effect, e.g. `same-origin`                                |
+| `previous_response_url`     | Navigation reports: the response navigated away from                        |
+| `next_response_url`         | Navigation reports: the response navigated to                               |
+| `referrer`                  | The referrer, where the report includes one                                 |
+| `property`                  | Access reports: the window property accessed, e.g. `postMessage`            |
+| `opener_url`                | Access reports: the opener's URL                                            |
+| `opened_window_url`         | Access reports: the opened window's URL                                     |
+| `opened_window_initial_url` | Access reports: the opened window's initial URL                             |
+| `other_url`                 | Access reports: the other window's URL                                      |
+| `source_file`               | Access reports: the script that made the access                             |
+| `line_number`               | Access reports: line of the access in `source_file`                         |
+| `column_number`             | Access reports: column of the access in `source_file`                       |
+| `metadata`                  | Value of the `metadata` query parameter (if present)                        |
+| `path`                      | Path of the collector endpoint that received the report                     |
+
+Fields that don't apply to a report's `type` are logged empty.
+
 #### Building for Docker
 
 You will either need to build within a docker container for the purpose, or use `CGO_ENABLED=0` flag
@@ -90,6 +130,7 @@ get a 404 like any other unknown path.
 | `csp`               | `POST /`, `POST /csp`, `POST /csp/report-only`                          |
 | `reporting-api-csp` | `OPTIONS` and `POST /reporting-api/csp`                                 |
 | `nel`               | `OPTIONS` and `POST` for `/nel` and `/nel/report-only`                  |
+| `reporting-api-coop` | `OPTIONS` and `POST /reporting-api/coop`                              |
 
 For example, to collect CSP reports but not NEL reports:
 
@@ -117,7 +158,7 @@ served.
 | log-truncated-client-ip | Include a field in the log with the truncated IP (to /24 for IPv4, /64 for IPv6) delivering the report, or the value of the `X-Forwarded-For` header, if present. Conflicts with `log-client-ip`. |
 | truncate-query-fragment | Remove all query strings and fragments (if set) from all URLs transmitted by the client                                                                                                           |
 | query-params-metadata   | Log all query parameters of the report URL as a map in the `metadata` field                                                                                                                       |
-| endpoints               | Comma separated list of endpoint groups to serve: `csp`, `reporting-api-csp` and `nel`. Defaults to all of them. See [Disabling endpoints](#disabling-endpoints).                                |
+| endpoints               | Comma separated list of endpoint groups to serve. Defaults to all of them. See [Disabling endpoints](#disabling-endpoints) for the groups.                                                          |
 
 See the `sample.filterlist.txt` file as an example of the URI prefix filter list, and
 `sample.domainlist.txt` as an example of the domain filter list.

@@ -163,7 +163,7 @@ type routerConfig struct {
 
 // endpointGroups are the names accepted by --endpoints. Each one enables
 // every route, including CORS preflights, for one kind of report.
-var endpointGroups = []string{"csp", "reporting-api-csp", "nel"}
+var endpointGroups = []string{"csp", "reporting-api-csp", "nel", "reporting-api-coop"}
 
 // parseEndpoints turns the comma separated --endpoints value into the set
 // of enabled groups. An unknown name is an error rather than ignored, so a
@@ -230,6 +230,13 @@ func newRouter(cfg routerConfig, logger *logrus.Logger, m *metrics.Metrics) *mux
 		r.HandleFunc("/nel", handler.ReportAPICorsHandler).Methods("OPTIONS")
 		r.Handle("/nel", wrapWithPrometheus("nel", "/nel", handler.NewNELHandler(
 			false, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
+		))).Methods("POST")
+	}
+
+	if cfg.endpoints["reporting-api-coop"] {
+		r.HandleFunc("/reporting-api/coop", handler.ReportAPICorsHandler).Methods("OPTIONS")
+		r.Handle("/reporting-api/coop", wrapWithPrometheus("reporting_api_coop", "/reporting-api/coop", handler.NewReportAPICOOPHandler(
+			cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
 		))).Methods("POST")
 	}
 

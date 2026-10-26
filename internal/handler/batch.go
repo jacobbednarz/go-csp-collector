@@ -194,6 +194,16 @@ func (h *BatchReportHandler[T]) decode(body []byte, r *http.Request) ([]T, error
 	return items, nil
 }
 
+// truncateURLFields strips the query string and fragment from each named
+// field, for --truncate-query-fragment.
+func truncateURLFields(fields log.Fields, keys ...string) {
+	for _, k := range keys {
+		if v, ok := fields[k].(string); ok {
+			fields[k] = utils.TruncateQueryStringFragment(v)
+		}
+	}
+}
+
 func addClientIPField(fields log.Fields, r *http.Request, logFull, logTruncated bool, logger *log.Logger) {
 	if logFull {
 		ip, err := utils.GetClientIP(r)

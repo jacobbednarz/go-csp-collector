@@ -53,7 +53,8 @@ custom:
   # Override the default /_healthcheck endpoint path. Empty (default) keeps
   # the collector default.
   healthCheckPath: ""
-  # Comma separated endpoint groups to serve: csp, reporting-api-csp, nel.
+  # Comma separated endpoint groups to serve. See "Disabling endpoints" in
+  # the collector README for the groups.
   # Empty (default) serves all of them. Eg
   # endpoints: "csp,reporting-api-csp"
   endpoints: ""
