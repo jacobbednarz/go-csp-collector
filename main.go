@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"errors"
 	"flag"
 	"fmt"
@@ -37,6 +38,15 @@ var (
 		logrus.FieldKeyLevel: "level",
 		logrus.FieldKeyMsg:   "message",
 	}
+
+	// defaultFilterList is the built-in blocked URI filter list. It's
+	// embedded from the sample file so that the file people copy for
+	// --filter-file is always the list the collector actually uses.
+	//
+	//go:embed sample.filterlist.txt
+	defaultFilterList string
+
+	defaultBlockedURIs = utils.TrimEmptyAndComments(strings.Split(defaultFilterList, "\n"))
 )
 
 var logger = logrus.New()
@@ -91,7 +101,7 @@ func main() {
 	}
 
 	logger.Debug("starting up...")
-	ignoredBlockedURIs := utils.DefaultIgnoredBlockedURIs
+	ignoredBlockedURIs := defaultBlockedURIs
 	if *blockedURIFile != "" {
 		logger.Debugf("using Filter list from file at: %s\n", *blockedURIFile)
 
