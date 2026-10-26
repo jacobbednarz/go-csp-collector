@@ -103,6 +103,17 @@ func NewCSPHandler(reportOnly bool, blockedURIs, blockedDomains []string, trunca
 		},
 
 		Process: func(report CSPReport, r *http.Request, metadata interface{}) ProcessResult {
+			// The browser knows which header the policy came from, so CSP3's
+			// disposition wins over the route. Browsers that omit it fall
+			// back to the route the report was sent to.
+			reportOnly := reportOnly
+			switch report.Body.Disposition {
+			case "report":
+				reportOnly = true
+			case "enforce":
+				reportOnly = false
+			}
+
 			lf := log.Fields{
 				"report_only":         reportOnly,
 				"document_uri":        report.Body.DocumentURI,

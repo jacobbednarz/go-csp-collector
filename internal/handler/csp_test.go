@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
 )
 
 var blockedDomains = []string{
@@ -511,6 +512,59 @@ func TestGenericCSPHandlerReportOnly(t *testing.T) {
 	}
 	if got := testutil.ToFloat64(m.Reports.WithLabelValues("csp", "report_only")); got != 1 {
 		t.Fatalf("reports_total report_only = %v, want 1", got)
+	}
+}
+
+// CSP3 adds `disposition` to the report body. The browser knows which
+// header the policy came from, so it wins over the route; browsers that
+// omit it fall back to the route the report was sent to.
+func TestCSPHandlerReportOnlyFromDisposition(t *testing.T) {
+	tests := []struct {
+		name            string
+		routeReportOnly bool
+		disposition     string
+		wantReportOnly  bool
+		wantMode        string
+	}{
+		{name: "enforce_route_no_disposition", routeReportOnly: false, disposition: "", wantReportOnly: false, wantMode: "enforced"},
+		{name: "report_only_route_no_disposition", routeReportOnly: true, disposition: "", wantReportOnly: true, wantMode: "report_only"},
+		{name: "enforce_route_report_disposition", routeReportOnly: false, disposition: "report", wantReportOnly: true, wantMode: "report_only"},
+		{name: "report_only_route_enforce_disposition", routeReportOnly: true, disposition: "enforce", wantReportOnly: false, wantMode: "enforced"},
+		{name: "matching_route_and_disposition", routeReportOnly: true, disposition: "report", wantReportOnly: true, wantMode: "report_only"},
+		{name: "unknown_disposition_uses_route", routeReportOnly: true, disposition: "bogus", wantReportOnly: true, wantMode: "report_only"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry := prometheus.NewRegistry()
+			m := metrics.New(registry)
+			l := logrus.New()
+			l.SetOutput(bytes.NewBuffer(nil))
+			hook := logtest.NewLocal(l)
+			h := NewCSPHandler(tt.routeReportOnly, nil, nil, false, false, false, false, l, m)
+
+			payload := fmt.Sprintf(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/app.js","disposition":%q}}`, tt.disposition)
+			req := httptest.NewRequest("POST", "/csp", strings.NewReader(payload))
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d", rr.Code)
+			}
+			entries := hook.AllEntries()
+			if len(entries) != 1 {
+				t.Fatalf("got %d log entries, want 1", len(entries))
+			}
+			if got := entries[0].Data["report_only"]; got != tt.wantReportOnly {
+				t.Errorf("report_only = %v, want %v", got, tt.wantReportOnly)
+			}
+			if got := testutil.CollectAndCount(m.Reports); got != 1 {
+				t.Fatalf("reports_total has %d series, want 1", got)
+			}
+			if got := testutil.ToFloat64(m.Reports.WithLabelValues("csp", tt.wantMode)); got != 1 {
+				t.Errorf("reports_total %s = %v, want 1", tt.wantMode, got)
+			}
+		})
 	}
 }
 
