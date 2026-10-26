@@ -261,8 +261,8 @@ keep both in one collector and tell them apart in your log aggregation tool.
 | `--filter-file`             | Replaces the built-in CSP blocked URI prefix list with the one in this file. See [Filtering CSP reports](#filtering-csp-reports)                     |
 | `--filter-domains-file`     | Drops CSP reports whose blocked URI is on a domain in this file. See [Filtering CSP reports](#filtering-csp-reports)                                |
 | `--truncate-query-fragment` | Removes query strings and fragments from the URLs in each report before logging, to reduce the chance of logging sensitive data                     |
-| `--log-client-ip`           | Logs the IP delivering the report, or the `X-Forwarded-For` header if present                                                                       |
-| `--log-truncated-client-ip` | Logs the IP delivering the report truncated to a /24 for IPv4 or a /64 for IPv6, or the `X-Forwarded-For` header if present. Conflicts with `--log-client-ip` |
+| `--log-client-ip`           | Logs the IP delivering the report, or the first address in `X-Forwarded-For` if present. The header is trusted as sent, so only use it behind a proxy that sets it |
+| `--log-truncated-client-ip` | Same as `--log-client-ip`, but truncated to a /24 for IPv4 or a /64 for IPv6. Can't be combined with `--log-client-ip` |
 | `--query-params-metadata`   | Logs every query parameter of the report URL as a map in `metadata`. See [Request metadata](#request-metadata)                                      |
 
 ### Disabling endpoints

@@ -51,7 +51,10 @@ func TruncateClientIP(addr netip.Addr) string {
 
 func GetClientIP(r *http.Request) (netip.Addr, error) {
 	if s := r.Header.Get("X-Forwarded-For"); s != "" {
-		addr, err := netip.ParseAddr(s)
+		// Each proxy appends the address it received the request from, so
+		// the first entry is the original client.
+		client, _, _ := strings.Cut(s, ",")
+		addr, err := netip.ParseAddr(strings.TrimSpace(client))
 		if err != nil {
 			return netip.Addr{}, fmt.Errorf("unable to parse address from X-Forwarded-For=%s: %w", s, err)
 		}
