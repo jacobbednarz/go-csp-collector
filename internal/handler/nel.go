@@ -46,6 +46,8 @@ func NewNELHandler(reportOnly, truncateQueryStringFragment, logClientIP, logTrun
 		Logger:               logger,
 		Metrics:              m,
 
+		SetResponseHeaders: setCORSResponseHeaders,
+
 		Validate: func(report NELReport) (string, error) {
 			if !strings.HasPrefix(report.URL, "http") {
 				return "validation_error", fmt.Errorf("url ('%s') is invalid", report.URL)

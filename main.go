@@ -171,10 +171,12 @@ func newRouter(cfg routerConfig, logger *logrus.Logger, m *metrics.Metrics) *mux
 		false, cfg.blockedURIs, cfg.blockedDomains, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
 	))).Methods("POST")
 
+	r.HandleFunc("/nel/report-only", handler.ReportAPICorsHandler).Methods("OPTIONS")
 	r.Handle("/nel/report-only", wrapWithPrometheus("nel", "/nel/report-only", handler.NewNELHandler(
 		true, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
 	))).Methods("POST")
 
+	r.HandleFunc("/nel", handler.ReportAPICorsHandler).Methods("OPTIONS")
 	r.Handle("/nel", wrapWithPrometheus("nel", "/nel", handler.NewNELHandler(
 		false, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
 	))).Methods("POST")
