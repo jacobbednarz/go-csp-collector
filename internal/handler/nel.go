@@ -55,9 +55,11 @@ func NewNELHandler(reportOnly, truncateQueryStringFragment, logClientIP, logTrun
 			return "", nil
 		},
 
-		// NEL keeps its own dedicated metric, not the shared Reports counter.
+		// NEL also counts in its own nel_reports_total, which is deprecated
+		// and kept until dashboards have moved to reports_total.
 		RecordSuccessMetric: func(mode string) {
 			if m != nil {
+				m.Reports.WithLabelValues("nel", mode).Inc()
 				m.NELReports.WithLabelValues(mode).Inc()
 			}
 		},
