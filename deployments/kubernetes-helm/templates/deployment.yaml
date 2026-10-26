@@ -101,11 +101,11 @@ spec:
             {{- end }}
           livenessProbe:
             httpGet:
-              path: /_healthcheck
+              path: {{ .Values.custom.healthCheckPath | default "/_healthcheck" | quote }}
               port: http
           readinessProbe:
             httpGet:
-              path: /_healthcheck
+              path: {{ .Values.custom.healthCheckPath | default "/_healthcheck" | quote }}
               port: http
           resources:
 {{ toYaml .Values.resources | indent 12 }}
