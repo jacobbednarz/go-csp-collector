@@ -303,6 +303,7 @@ func TestGenericReportAPICSPHandlerMixedBatchPreservesWellFormedReport(t *testin
 	var logBuf bytes.Buffer
 	l := logrus.New()
 	l.SetOutput(&logBuf)
+	l.SetLevel(logrus.DebugLevel)
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, nil)
 
 	payload := []byte(`[

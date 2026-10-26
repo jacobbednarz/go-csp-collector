@@ -123,7 +123,7 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 				"reason": "item_decode_error",
 				"body":   string(raw),
 				"path":   r.URL.Path,
-			}).Warn()
+			}).Debug()
 			continue
 		}
 		items = append(items, item)

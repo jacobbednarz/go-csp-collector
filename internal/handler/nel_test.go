@@ -147,6 +147,7 @@ func TestGenericNELHandlerMixedBatchPreservesWellFormedReport(t *testing.T) {
 	var logBuf bytes.Buffer
 	l := logrus.New()
 	l.SetOutput(&logBuf)
+	l.SetLevel(logrus.DebugLevel)
 	h := NewNELHandler(false, false, false, false, false, l, nil)
 
 	payload := []byte(`[

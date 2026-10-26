@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
 )
 
 // testReport is a minimal ReportTyped implementation used to exercise
@@ -154,6 +156,7 @@ func (errReader) Read(p []byte) (int, error) { return 0, errors.New("simulated r
 
 func TestBatchReportHandlerItemDecodeErrorSkipsAndContinues(t *testing.T) {
 	l, buf := newTestLogger()
+	l.SetLevel(logrus.DebugLevel)
 	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Process: passthroughProcess}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"good"},{"type":"x","value":123}]`))
@@ -169,6 +172,60 @@ func TestBatchReportHandlerItemDecodeErrorSkipsAndContinues(t *testing.T) {
 	}
 	if !strings.Contains(out, "item_decode_error") {
 		t.Errorf("expected the malformed item to be logged with item_decode_error, got: %s", out)
+	}
+}
+
+// Malformed items are usually garbage or hostile, so logging them must be
+// an explicit opt-in via debug level rather than noise at the default level.
+func TestBatchReportHandlerItemDecodeErrorLogLevel(t *testing.T) {
+	tests := []struct {
+		name        string
+		level       logrus.Level
+		wantEntries []*logrus.Entry
+	}{
+		{
+			name:        "hidden_at_info",
+			level:       logrus.InfoLevel,
+			wantEntries: nil,
+		},
+		{
+			name:  "logged_at_debug",
+			level: logrus.DebugLevel,
+			wantEntries: []*logrus.Entry{{
+				Level: logrus.DebugLevel,
+				Data: logrus.Fields{
+					"reason": "item_decode_error",
+					"body":   `{"type":"x","value":123}`,
+					"path":   "/batch",
+				},
+			}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l, _ := newTestLogger()
+			l.SetLevel(tt.level)
+			hook := logtest.NewLocal(l)
+			h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Process: passthroughProcess}
+
+			req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":123}]`))
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d", rr.Code)
+			}
+			got := hook.AllEntries()
+			if len(got) != len(tt.wantEntries) {
+				t.Fatalf("got %d log entries, want %d: %v", len(got), len(tt.wantEntries), got)
+			}
+			for i, want := range tt.wantEntries {
+				if got[i].Level != want.Level || !reflect.DeepEqual(got[i].Data, want.Data) {
+					t.Errorf("entry %d = {%s %v}, want {%s %v}", i, got[i].Level, got[i].Data, want.Level, want.Data)
+				}
+			}
+		})
 	}
 }
 
