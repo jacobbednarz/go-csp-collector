@@ -1,4 +1,4 @@
-# Kubernetes / Helm Deployment Template for the CSP violation collector
+# Helm chart for go-csp-collector
 
 ## TL;DR;
 
@@ -10,8 +10,10 @@ $ helm upgrade csp-collector go-csp-collector/csp-collector --values custom-valu
 
 ## Introduction
 
-This chart deploys a Content Security Policy violation collector from
-https://github.com/jacobbednarz/go-csp-collector/
+This chart deploys [go-csp-collector](https://github.com/jacobbednarz/go-csp-collector),
+which collects the security reports browsers send: Content Security Policy
+(CSP) violations, Network Error Logging (NEL), and Cross-Origin-Opener-Policy
+(COOP), Cross-Origin-Embedder-Policy (COEP) and other Reporting API reports.
 
 Using the [kubernetes-helm/values.yaml][1] file create a custom-values.yaml override
 with just the changed values then run the commands above. Example:
