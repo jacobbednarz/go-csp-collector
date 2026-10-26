@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -36,6 +37,16 @@ func TestFilterListProcessing(t *testing.T) {
 	}
 	if trimmed[1] != "chrome-extension://" {
 		t.Errorf("unexpected list entry; got %v", trimmed[1])
+	}
+}
+
+// Filter files saved on Windows, or checked out with CRLF line endings, would
+// otherwise leave a trailing \r on every entry so none of them match.
+func TestFilterListProcessingTrimsWhitespace(t *testing.T) {
+	got := utils.TrimEmptyAndComments(strings.Split("# comment\r\nchrome-extension\r\n  \r\n moz-extension \r\n", "\n"))
+	want := []string{"chrome-extension", "moz-extension"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 

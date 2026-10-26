@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,14 +12,13 @@ import (
 
 	"github.com/jacobbednarz/go-csp-collector/internal/handler"
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
-	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/sirupsen/logrus"
 )
 
-var cspViolationReportHandler = handler.NewCSPHandler(false, utils.DefaultIgnoredBlockedURIs, nil, false, false, false, false, logrus.New(), nil)
+var cspViolationReportHandler = handler.NewCSPHandler(false, defaultBlockedURIs, nil, false, false, false, false, logrus.New(), nil)
 
 func TestHandlerForDisallowedMethods(t *testing.T) {
 	disallowedMethods := []string{"GET", "DELETE", "PUT", "TRACE", "PATCH"}
@@ -43,6 +43,18 @@ func TestHandlerForDisallowedMethods(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// The Helm chart can't read files outside its own directory, so it ships a
+// copy of the built-in list as the example for custom.filterlist.
+func TestHelmFilterListMatchesBuiltIn(t *testing.T) {
+	helm, err := os.ReadFile("deployments/kubernetes-helm/configMaps/filterlist.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(helm) != defaultFilterList {
+		t.Errorf("deployments/kubernetes-helm/configMaps/filterlist.txt differs from sample.filterlist.txt; copy it over")
 	}
 }
 
