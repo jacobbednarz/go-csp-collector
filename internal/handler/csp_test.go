@@ -4,16 +4,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/sirupsen/logrus"
-	logtest "github.com/sirupsen/logrus/hooks/test"
 )
 
 var blockedDomains = []string{
@@ -47,7 +47,7 @@ var invalidBlockedURIs = []string{
 	"bdvideo://error",
 }
 
-func newTestCSPHandler(blockedURIs, blockedDomains []string, l *logrus.Logger, m *metrics.Metrics) http.Handler {
+func newTestCSPHandler(blockedURIs, blockedDomains []string, l *slog.Logger, m *metrics.Metrics) http.Handler {
 	return NewCSPHandler(false, blockedURIs, blockedDomains, false, false, false, false, l, m)
 }
 
@@ -70,8 +70,7 @@ func TestGenericCSPHandlerInvalidBlockedURIs(t *testing.T) {
 				}
 			}`, blockedURI))
 
-			l := logrus.New()
-			l.SetOutput(bytes.NewBuffer(nil))
+			l, _ := newTestLogger()
 			h := newTestCSPHandler(invalidBlockedURIs, nil, l, nil)
 
 			req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(rawReport))
@@ -98,8 +97,7 @@ func TestGenericCSPHandlerValidBlockedURIs(t *testing.T) {
 		}
 	}`)
 
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 	h := newTestCSPHandler(invalidBlockedURIs, nil, l, nil)
 
 	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(rawReport))
@@ -119,8 +117,7 @@ func TestGenericCSPHandlerNonHttpDocumentURI(t *testing.T) {
 		}
 	}`)
 
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 	h := newTestCSPHandler(invalidBlockedURIs, nil, l, nil)
 
 	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(rawReport))
@@ -146,9 +143,7 @@ func TestGenericCSPHandlerWithMetadata(t *testing.T) {
 	payload, _ := json.Marshal(csp)
 
 	for _, repeats := range []int{1, 2} {
-		l := logrus.New()
-		var logBuffer bytes.Buffer
-		l.SetOutput(&logBuffer)
+		l, logBuffer := newTestLogger()
 
 		url := "/?"
 		for i := 0; i < repeats; i++ {
@@ -191,9 +186,7 @@ func TestGenericCSPHandlerWithMetadataObject(t *testing.T) {
 
 	payload, _ := json.Marshal(csp)
 
-	l := logrus.New()
-	var logBuffer bytes.Buffer
-	l.SetOutput(&logBuffer)
+	l, logBuffer := newTestLogger()
 
 	request, err := http.NewRequest("POST", "/path?a=b&c=d", bytes.NewBuffer(payload))
 	if err != nil {
@@ -240,8 +233,7 @@ func TestGenericCSPHandlerMultipleTypeStatusCode(t *testing.T) {
 			}
 
 			recorder := httptest.NewRecorder()
-			l := logrus.New()
-			l.SetOutput(bytes.NewBuffer(nil))
+			l, _ := newTestLogger()
 			h := newTestCSPHandler(invalidBlockedURIs, nil, l, nil)
 			h.ServeHTTP(recorder, request)
 
@@ -280,8 +272,7 @@ func TestGenericCSPHandlerWithSourceFile(t *testing.T) {
 		t.Errorf("Violation 'column-number' not found")
 	}
 
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 	h := newTestCSPHandler(invalidBlockedURIs, nil, l, nil)
 
 	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(rawReport))
@@ -368,8 +359,7 @@ func TestGenericCSPHandlerBlockedDomain(t *testing.T) {
 				}
 			}`, tc.blockedURI)
 
-			l := logrus.New()
-			l.SetOutput(bytes.NewBuffer(nil))
+			l, _ := newTestLogger()
 			h := newTestCSPHandler(nil, blockedDomains, l, nil)
 
 			req := httptest.NewRequest("POST", "/csp", bytes.NewBufferString(rawReport))
@@ -387,8 +377,7 @@ func TestCSPHandlerMetricsSuccess(t *testing.T) {
 	payload := []byte(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/app.js"}}`)
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := newTestCSPHandler(nil, nil, l, m)
 
@@ -407,8 +396,7 @@ func TestCSPHandlerMetricsSuccess(t *testing.T) {
 func TestCSPHandlerMetricsDecodeError(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := newTestCSPHandler(nil, nil, l, m)
 
@@ -428,8 +416,7 @@ func TestCSPHandlerMetricsFilteredDomain(t *testing.T) {
 	payload := []byte(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://ads.example-tracker.com/asset.js"}}`)
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := newTestCSPHandler(nil, []string{"example-tracker.com"}, l, m)
 
@@ -449,8 +436,7 @@ func TestCSPHandlerMetricsFilteredURI(t *testing.T) {
 	payload := []byte(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"inline"}}`)
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := newTestCSPHandler([]string{"inline"}, nil, l, m)
 
@@ -470,8 +456,7 @@ func TestCSPHandlerMetricsValidationError(t *testing.T) {
 	payload := []byte(`{"csp-report":{"document-uri":"about:blank","blocked-uri":"https://cdn.example.com/app.js"}}`)
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := newTestCSPHandler(nil, nil, l, m)
 
@@ -493,9 +478,7 @@ func TestCSPHandlerMetricsValidationError(t *testing.T) {
 func TestGenericCSPHandlerReportOnly(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	var logBuffer bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuffer)
+	l, logBuffer := newTestLogger()
 
 	h := NewCSPHandler(true, nil, nil, false, false, false, false, l, m)
 
@@ -538,9 +521,7 @@ func TestCSPHandlerReportOnlyFromDisposition(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			registry := prometheus.NewRegistry()
 			m := metrics.New(registry)
-			l := logrus.New()
-			l.SetOutput(bytes.NewBuffer(nil))
-			hook := logtest.NewLocal(l)
+			l, rec := newRecordingLogger(slog.LevelInfo)
 			h := NewCSPHandler(tt.routeReportOnly, nil, nil, false, false, false, false, l, m)
 
 			payload := fmt.Sprintf(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/app.js","disposition":%q}}`, tt.disposition)
@@ -551,7 +532,7 @@ func TestCSPHandlerReportOnlyFromDisposition(t *testing.T) {
 			if rr.Code != http.StatusOK {
 				t.Fatalf("expected 200, got %d", rr.Code)
 			}
-			entries := hook.AllEntries()
+			entries := rec.Entries()
 			if len(entries) != 1 {
 				t.Fatalf("got %d log entries, want 1", len(entries))
 			}
@@ -569,9 +550,7 @@ func TestCSPHandlerReportOnlyFromDisposition(t *testing.T) {
 }
 
 func TestGenericCSPHandlerTruncatesQueryStringFragment(t *testing.T) {
-	var logBuffer bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuffer)
+	l, rec := newRecordingLogger(slog.LevelInfo)
 
 	h := NewCSPHandler(false, nil, nil, true, false, false, false, l, nil)
 
@@ -583,12 +562,15 @@ func TestGenericCSPHandlerTruncatesQueryStringFragment(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	out := logBuffer.String()
-	if strings.Contains(out, "?a=b") || strings.Contains(out, "#frag") {
-		t.Errorf("expected query string and fragment to be truncated from every truncated field, got: %s", out)
+	got := urlFields(t, rec, "document_uri", "referrer", "blocked_uri", "source_file")
+	want := Fields{
+		"document_uri": "https://example.com/",
+		"referrer":     "https://ref.example.com/",
+		"blocked_uri":  "https://cdn.example.com/app.js",
+		"source_file":  "https://example.com/app.js",
 	}
-	if !strings.Contains(out, "document_uri=\"https://example.com/\"") {
-		t.Errorf("expected truncated document_uri, got: %s", out)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("truncated fields = %v, want %v", got, want)
 	}
 }
 
@@ -615,8 +597,7 @@ func TestCSPHandlerRejectsBodiesThatAreNotASingleReport(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			registry := prometheus.NewRegistry()
 			m := metrics.New(registry)
-			l := logrus.New()
-			l.SetOutput(bytes.NewBuffer(nil))
+			l, _ := newTestLogger()
 			h := newTestCSPHandler(nil, nil, l, m)
 
 			req := httptest.NewRequest("POST", "/csp", strings.NewReader(tt.body))

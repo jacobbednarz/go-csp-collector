@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -17,10 +19,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/sirupsen/logrus"
 )
 
-var cspViolationReportHandler = handler.NewCSPHandler(false, defaultBlockedURIs, nil, false, false, false, false, logrus.New(), nil)
+var cspViolationReportHandler = handler.NewCSPHandler(false, defaultBlockedURIs, nil, false, false, false, false, slog.New(slog.DiscardHandler), nil)
 
 func TestHandlerForDisallowedMethods(t *testing.T) {
 	disallowedMethods := []string{"GET", "DELETE", "PUT", "TRACE", "PATCH"}
@@ -86,8 +87,7 @@ func TestDefaultFilterList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l := logrus.New()
-			l.SetOutput(&bytes.Buffer{})
+			l := slog.New(slog.DiscardHandler)
 			h := handler.NewCSPHandler(false, defaultBlockedURIs, nil, false, false, false, false, l, nil)
 
 			body := `{"csp-report":{"document-uri":"https://example.com/","blocked-uri":"` + tt.blockedURI + `"}}`
@@ -196,7 +196,7 @@ func TestMetricsEndpointUsesCustomRegistry(t *testing.T) {
 // Access-Control-Allow-Origin and Access-Control-Allow-Headers covering
 // content-type, and otherwise drops the batch and backs off the endpoint.
 func TestReportingAPIRoutesAnswerCORSPreflight(t *testing.T) {
-	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t)}, logrus.New(), metrics.New(prometheus.NewRegistry()))
+	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t)}, slog.New(slog.DiscardHandler), metrics.New(prometheus.NewRegistry()))
 
 	for _, path := range []string{"/nel", "/nel/report-only", "/reporting-api/csp", "/reporting-api/coop", "/reporting-api/coep", "/reporting-api/default"} {
 		t.Run(path, func(t *testing.T) {
@@ -230,8 +230,7 @@ func TestReportingAPIRoutesAnswerCORSPreflight(t *testing.T) {
 // The upload itself must carry the CORS headers too: Fetch-based Reporting
 // implementations apply the CORS check to the actual response.
 func TestReportingAPIRoutesSetCORSHeadersOnUpload(t *testing.T) {
-	logger := logrus.New()
-	logger.SetOutput(&bytes.Buffer{})
+	logger := slog.New(slog.DiscardHandler)
 	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t)}, logger, metrics.New(prometheus.NewRegistry()))
 
 	for _, path := range []string{"/nel", "/nel/report-only", "/reporting-api/csp", "/reporting-api/coop", "/reporting-api/coep", "/reporting-api/default"} {
@@ -328,8 +327,7 @@ func TestNewRouterOnlyRegistersEnabledEndpoints(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseEndpoints(%q): %v", enabled, err)
 			}
-			logger := logrus.New()
-			logger.SetOutput(&bytes.Buffer{})
+			logger := slog.New(slog.DiscardHandler)
 			r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: endpoints}, logger, metrics.New(prometheus.NewRegistry()))
 
 			for _, route := range routes {
@@ -422,5 +420,44 @@ func TestServeReturnsListenerErrors(t *testing.T) {
 
 	if err := serve(context.Background(), newServer(http.NewServeMux()), ln); err == nil {
 		t.Error("serve() = nil, want the error from a closed listener")
+	}
+}
+
+// Log pipelines parse the collector's output, so the keys and level names
+// stay the ones it has always written: timestamp, level and message, with
+// logrus' lowercase level names and RFC 3339 timestamps. Text output leaves
+// out a report's empty message, while JSON has always kept it.
+func TestNewLogHandlerKeepsTheLogFormat(t *testing.T) {
+	timestamp := regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})`)
+	tests := []struct {
+		format string
+		want   string
+	}{
+		{
+			format: "text",
+			want: `timestamp=TS level=info blocked_uri=inline document_uri="https://example.com/a b" metadata=<nil> report_only=false
+timestamp=TS level=warning message="unable to parse client ip" error=bad
+`,
+		},
+		{
+			format: "json",
+			want: `{"timestamp":"TS","level":"info","message":"","blocked_uri":"inline","document_uri":"https://example.com/a b","metadata":null,"report_only":false}
+{"timestamp":"TS","level":"warning","message":"unable to parse client ip","error":"bad"}
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.format, func(t *testing.T) {
+			var buf bytes.Buffer
+			l := slog.New(newLogHandler(&buf, tt.format, slog.LevelInfo))
+			l.Info("", "blocked_uri", "inline", "document_uri", "https://example.com/a b", "metadata", nil, "report_only", false)
+			l.Warn("unable to parse client ip", "error", "bad")
+			l.Debug("hidden below the configured level")
+
+			if got := timestamp.ReplaceAllString(buf.String(), "TS"); got != tt.want {
+				t.Errorf("output =\n%s\nwant\n%s", got, tt.want)
+			}
+		})
 	}
 }

@@ -3,15 +3,16 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/sirupsen/logrus"
 )
 
 func sampleNELReport(url string) []NELReport {
@@ -37,8 +38,7 @@ func sampleNELReport(url string) []NELReport {
 }
 
 func TestGenericNELHandlerDisallowedMethods(t *testing.T) {
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 	h := NewNELHandler(false, false, false, false, false, l, nil)
 
 	for _, method := range []string{"GET", "PUT", "DELETE", "PATCH", "TRACE"} {
@@ -54,8 +54,7 @@ func TestGenericNELHandlerDisallowedMethods(t *testing.T) {
 }
 
 func TestGenericNELHandlerInvalidJSON(t *testing.T) {
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 	h := NewNELHandler(false, false, false, false, false, l, nil)
 
 	req := httptest.NewRequest("POST", "/nel", strings.NewReader("not json"))
@@ -70,9 +69,7 @@ func TestGenericNELHandlerInvalidJSON(t *testing.T) {
 func TestGenericNELHandlerSkipsInvalidURLAndKeepsRestOfBatch(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
+	l, logBuf := newTestLogger()
 	h := NewNELHandler(false, false, false, false, false, l, m)
 
 	payload, _ := json.Marshal(append(sampleNELReport("about:blank"), sampleNELReport("https://example.com/nel-good")...))
@@ -96,9 +93,7 @@ func TestGenericNELHandlerSkipsInvalidURLAndKeepsRestOfBatch(t *testing.T) {
 }
 
 func TestGenericNELHandlerLogsReportOnly(t *testing.T) {
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
+	l, logBuf := newTestLogger()
 	h := NewNELHandler(true, false, false, false, false, l, nil)
 
 	payload, _ := json.Marshal(sampleNELReport("https://example.com/page"))
@@ -115,9 +110,7 @@ func TestGenericNELHandlerLogsReportOnly(t *testing.T) {
 }
 
 func TestGenericNELHandlerSkipsNonNetworkErrorReports(t *testing.T) {
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
+	l, logBuf := newTestLogger()
 	h := NewNELHandler(false, false, false, false, false, l, nil)
 
 	reports := []NELReport{
@@ -137,10 +130,7 @@ func TestGenericNELHandlerSkipsNonNetworkErrorReports(t *testing.T) {
 }
 
 func TestGenericNELHandlerMixedBatchPreservesWellFormedReport(t *testing.T) {
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
-	l.SetLevel(logrus.DebugLevel)
+	l, logBuf := newTestLoggerAtLevel(slog.LevelDebug)
 	h := NewNELHandler(false, false, false, false, false, l, nil)
 
 	payload := []byte(`[
@@ -167,8 +157,7 @@ func TestGenericNELHandlerMixedBatchPreservesWellFormedReport(t *testing.T) {
 func TestGenericNELHandlerMetricsSuccessAndIgnored(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := NewNELHandler(false, false, false, false, false, l, m)
 	reports := []NELReport{
@@ -201,8 +190,7 @@ func TestGenericNELHandlerRejectsBareObject(t *testing.T) {
 	// single-item batch.
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 	h := NewNELHandler(false, false, false, false, false, l, m)
 
 	payload, _ := json.Marshal(sampleNELReport("https://example.com/page")[0])
@@ -219,9 +207,7 @@ func TestGenericNELHandlerRejectsBareObject(t *testing.T) {
 }
 
 func TestGenericNELHandlerTruncatesQueryStringFragment(t *testing.T) {
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
+	l, rec := newRecordingLogger(slog.LevelInfo)
 	h := NewNELHandler(false, true, false, false, false, l, nil)
 
 	reports := []NELReport{
@@ -239,11 +225,9 @@ func TestGenericNELHandlerTruncatesQueryStringFragment(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	out := logBuf.String()
-	if strings.Contains(out, "?a=b") || strings.Contains(out, "#frag") {
-		t.Errorf("expected query string and fragment to be truncated, got: %s", out)
-	}
-	if !strings.Contains(out, "url=\"https://example.com/page\"") {
-		t.Errorf("expected truncated url, got: %s", out)
+	got := urlFields(t, rec, "url", "referrer")
+	want := Fields{"url": "https://example.com/page", "referrer": "https://ref.example.com/"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("truncated fields = %v, want %v", got, want)
 	}
 }

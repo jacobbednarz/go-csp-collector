@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/jacobbednarz/go-csp-collector/internal/handler"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
-	"github.com/sirupsen/logrus"
 )
 
 func TestFilterListProcessing(t *testing.T) {
@@ -51,9 +51,8 @@ func TestFilterListProcessingTrimsWhitespace(t *testing.T) {
 }
 
 func TestLogsPath(t *testing.T) {
-	log := logrus.New()
 	var logBuffer bytes.Buffer
-	log.SetOutput(&logBuffer)
+	log := slog.New(slog.NewTextHandler(&logBuffer, nil))
 
 	csp := handler.CSPReport{
 		Body: handler.CSPReportBody{

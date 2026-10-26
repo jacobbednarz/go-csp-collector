@@ -2,11 +2,11 @@ package handler
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
-	log "github.com/sirupsen/logrus"
 )
 
 // COEPReport is a Cross-Origin-Embedder-Policy violation delivered by the
@@ -31,7 +31,7 @@ type COEPReportBody struct {
 }
 
 // NewReportAPICOEPHandler builds the reporting-api/coep handler on BatchReportHandler.
-func NewReportAPICOEPHandler(truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *log.Logger, m *metrics.Metrics) http.Handler {
+func NewReportAPICOEPHandler(truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *slog.Logger, m *metrics.Metrics) http.Handler {
 	return &BatchReportHandler[COEPReport]{
 		HandlerName:          "reporting_api_coep",
 		ExpectedType:         "coep",
@@ -53,7 +53,7 @@ func NewReportAPICOEPHandler(truncateQueryStringFragment, logClientIP, logTrunca
 		Process: func(report COEPReport, r *http.Request, metadata interface{}) ProcessResult {
 			// COEP's report-only disposition is "reporting", unlike CSP's "report".
 			reportOnly := report.Body.Disposition == "reporting"
-			lf := log.Fields{
+			lf := Fields{
 				"report_only": reportOnly,
 				"url":         report.URL,
 				"type":        report.Body.Type,
