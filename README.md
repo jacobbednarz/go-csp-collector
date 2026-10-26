@@ -38,6 +38,7 @@ $ ./csp_collector
 > [!IMPORTANT]  
 > Network error logging is still experimental in most browsers. This functionality is best effort and may need to adjust as the specification does.
 
+- `OPTIONS /nel`, `OPTIONS /nel/report-only`: CORS preflight handlers, needed when the collector is on a different origin to the reporting site.
 - `POST /nel`: accepts NEL reports for an enforced NEL policy.
 - `POST /nel/report-only`: same as `/nel` but appends a `report_only=true` attribute to the log line. Useful when testing a NEL policy before enforcing it.
 
