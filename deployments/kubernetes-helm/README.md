@@ -69,6 +69,6 @@ ingress:
 | `custom.logTruncatedClientIP` | Log the truncated reporting client IP address (IPv4 /24, IPv6 /64). | `false` |
 | `custom.queryParamsMetadata` | Write report URI query parameters as a JSON object under the `metadata` field instead of a single string. | `false` |
 | `custom.healthCheckPath`    | Override the default `/_healthcheck` endpoint path. Empty keeps the collector default. | `""` |
-| `custom.endpoints`          | Comma separated endpoint groups to serve (`csp`, `reporting-api-csp`, `nel`). Empty serves all of them. Set it with `--set-literal 'custom.endpoints=csp,nel'`, since `--set` splits values on commas. | `""` |
+| `custom.endpoints`          | Comma separated endpoint groups to serve (see [Disabling endpoints](https://github.com/jacobbednarz/go-csp-collector#disabling-endpoints)). Empty serves all of them. Set it with `--set-literal 'custom.endpoints=csp,nel'`, since `--set` splits values on commas. | `""` |
 
 [1]: https://github.com/jacobbednarz/go-csp-collector/tree/master/deployments/kubernetes-helm/values.yaml
