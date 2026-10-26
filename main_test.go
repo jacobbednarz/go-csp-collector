@@ -131,7 +131,7 @@ func TestMetricsEndpointUsesCustomRegistry(t *testing.T) {
 func TestReportingAPIRoutesAnswerCORSPreflight(t *testing.T) {
 	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t)}, logrus.New(), metrics.New(prometheus.NewRegistry()))
 
-	for _, path := range []string{"/nel", "/nel/report-only", "/reporting-api/csp", "/reporting-api/coop"} {
+	for _, path := range []string{"/nel", "/nel/report-only", "/reporting-api/csp", "/reporting-api/coop", "/reporting-api/coep"} {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodOptions, path, nil)
 			req.Header.Set("Origin", "https://site.example")
@@ -167,7 +167,7 @@ func TestReportingAPIRoutesSetCORSHeadersOnUpload(t *testing.T) {
 	logger.SetOutput(&bytes.Buffer{})
 	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t)}, logger, metrics.New(prometheus.NewRegistry()))
 
-	for _, path := range []string{"/nel", "/nel/report-only", "/reporting-api/csp", "/reporting-api/coop"} {
+	for _, path := range []string{"/nel", "/nel/report-only", "/reporting-api/csp", "/reporting-api/coop", "/reporting-api/coep"} {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("[]"))
 			req.Header.Set("Origin", "https://site.example")
@@ -201,11 +201,11 @@ func TestParseEndpoints(t *testing.T) {
 		want    map[string]bool
 		wantErr string
 	}{
-		{name: "all_groups", value: "csp,reporting-api-csp,nel,reporting-api-coop", want: map[string]bool{"csp": true, "reporting-api-csp": true, "nel": true, "reporting-api-coop": true}},
+		{name: "all_groups", value: "csp,reporting-api-csp,nel,reporting-api-coop,reporting-api-coep", want: map[string]bool{"csp": true, "reporting-api-csp": true, "nel": true, "reporting-api-coop": true, "reporting-api-coep": true}},
 		{name: "single_group", value: "csp", want: map[string]bool{"csp": true}},
 		{name: "surrounding_whitespace", value: " csp , nel ", want: map[string]bool{"csp": true, "nel": true}},
 		{name: "duplicates_and_empty_entries", value: "nel,,nel,", want: map[string]bool{"nel": true}},
-		{name: "unknown_group", value: "csp,nell", wantErr: `unknown endpoint "nell", valid endpoints are: csp, reporting-api-csp, nel, reporting-api-coop`},
+		{name: "unknown_group", value: "csp,nell", wantErr: `unknown endpoint "nell", valid endpoints are: csp, reporting-api-csp, nel, reporting-api-coop, reporting-api-coep`},
 		{name: "empty", value: "", wantErr: "at least one endpoint must be enabled"},
 		{name: "only_separators", value: " , ", wantErr: "at least one endpoint must be enabled"},
 	}
@@ -249,9 +249,11 @@ func TestNewRouterOnlyRegistersEnabledEndpoints(t *testing.T) {
 		{group: "nel", method: http.MethodPost, path: "/nel/report-only"},
 		{group: "reporting-api-coop", method: http.MethodOptions, path: "/reporting-api/coop"},
 		{group: "reporting-api-coop", method: http.MethodPost, path: "/reporting-api/coop"},
+		{group: "reporting-api-coep", method: http.MethodOptions, path: "/reporting-api/coep"},
+		{group: "reporting-api-coep", method: http.MethodPost, path: "/reporting-api/coep"},
 	}
 
-	for _, enabled := range []string{"csp", "reporting-api-csp", "nel", "csp,nel", "csp,reporting-api-csp,nel", "reporting-api-coop"} {
+	for _, enabled := range []string{"csp", "reporting-api-csp", "nel", "csp,nel", "csp,reporting-api-csp,nel", "reporting-api-coop", "reporting-api-coep"} {
 		t.Run(enabled, func(t *testing.T) {
 			endpoints, err := parseEndpoints(enabled)
 			if err != nil {

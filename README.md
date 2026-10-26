@@ -109,6 +109,33 @@ whether it came from the report-only header. Each logged COOP report includes:
 
 Fields that don't apply to a report's `type` are logged empty.
 
+#### COEP (Cross-Origin-Embedder-Policy)
+
+- `OPTIONS /reporting-api/coep`: CORS preflight handler for the Reporting API.
+- `POST /reporting-api/coep`: accepts [COEP violation reports](https://developer.mozilla.org/en-US/docs/Web/API/COEPViolationReport) delivered by the Reporting API. Entries with any other `type` are skipped.
+
+COEP reports are sent by Chrome and Safari. Like COOP, point the `report-to`
+parameter of `Cross-Origin-Embedder-Policy` (or
+`Cross-Origin-Embedder-Policy-Report-Only`) at an endpoint for this route:
+
+```http
+Reporting-Endpoints: coep-endpoint="https://collector.example.com/reporting-api/coep"
+Cross-Origin-Embedder-Policy: require-corp; report-to="coep-endpoint"
+```
+
+Each logged COEP report includes:
+
+| Field         | Description                                                              |
+| ------------- | ------------------------------------------------------------------------ |
+| `report_only` | `true` when `disposition` is `reporting`                                 |
+| `url`         | The URL of the document that generated the report                        |
+| `type`        | `corp`, `navigation` or `worker initialization`                          |
+| `blocked_uri` | The URL of the blocked resource                                          |
+| `destination` | `corp` reports: the blocked resource's destination, e.g. `image`         |
+| `disposition` | `enforce` or `reporting`                                                 |
+| `metadata`    | Value of the `metadata` query parameter (if present)                     |
+| `path`        | Path of the collector endpoint that received the report                  |
+
 #### Building for Docker
 
 You will either need to build within a docker container for the purpose, or use `CGO_ENABLED=0` flag
@@ -131,6 +158,7 @@ get a 404 like any other unknown path.
 | `reporting-api-csp` | `OPTIONS` and `POST /reporting-api/csp`                                 |
 | `nel`               | `OPTIONS` and `POST` for `/nel` and `/nel/report-only`                  |
 | `reporting-api-coop` | `OPTIONS` and `POST /reporting-api/coop`                              |
+| `reporting-api-coep` | `OPTIONS` and `POST /reporting-api/coep`                              |
 
 For example, to collect CSP reports but not NEL reports:
 
