@@ -23,22 +23,25 @@ func (r COOPReport) ReportType() string { return r.Type }
 
 // COOPReportBody holds every field a COOP violation can carry. Which ones
 // are set depends on Type: "navigation-to-response",
-// "navigation-from-response" or "access-to-opener".
+// "navigation-from-response", or one of the six "access-from-coop-page-to-*"
+// and "access-to-coop-page-from-*" types. The access report URL fields use
+// the names Chrome and the web-platform-tests send (openeeURL,
+// initialPopupURL, otherDocumentURL), which differ from the HTML spec prose.
 type COOPReportBody struct {
-	Disposition            string `json:"disposition"`
-	EffectivePolicy        string `json:"effectivePolicy"`
-	Type                   string `json:"type"`
-	PreviousResponseURL    string `json:"previousResponseURL"`
-	NextResponseURL        string `json:"nextResponseURL"`
-	Referrer               string `json:"referrer"`
-	Property               string `json:"property"`
-	OpenerURL              string `json:"openerURL"`
-	OpenedWindowURL        string `json:"openedWindowURL"`
-	OpenedWindowInitialURL string `json:"openedWindowInitialURL"`
-	OtherURL               string `json:"otherURL"`
-	SourceFile             string `json:"sourceFile"`
-	LineNumber             int    `json:"lineNumber"`
-	ColumnNumber           int    `json:"columnNumber"`
+	Disposition         string `json:"disposition"`
+	EffectivePolicy     string `json:"effectivePolicy"`
+	Type                string `json:"type"`
+	PreviousResponseURL string `json:"previousResponseURL"`
+	NextResponseURL     string `json:"nextResponseURL"`
+	Referrer            string `json:"referrer"`
+	Property            string `json:"property"`
+	OpenerURL           string `json:"openerURL"`
+	OpeneeURL           string `json:"openeeURL"`
+	InitialPopupURL     string `json:"initialPopupURL"`
+	OtherDocumentURL    string `json:"otherDocumentURL"`
+	SourceFile          string `json:"sourceFile"`
+	LineNumber          int    `json:"lineNumber"`
+	ColumnNumber        int    `json:"columnNumber"`
 }
 
 // NewReportAPICOOPHandler builds the reporting-api/coop handler on BatchReportHandler.
@@ -65,29 +68,29 @@ func NewReportAPICOOPHandler(truncateQueryStringFragment, logClientIP, logTrunca
 			// COOP's report-only disposition is "reporting", unlike CSP's "report".
 			reportOnly := report.Body.Disposition == "reporting"
 			lf := log.Fields{
-				"report_only":               reportOnly,
-				"url":                       report.URL,
-				"type":                      report.Body.Type,
-				"disposition":               report.Body.Disposition,
-				"effective_policy":          report.Body.EffectivePolicy,
-				"previous_response_url":     report.Body.PreviousResponseURL,
-				"next_response_url":         report.Body.NextResponseURL,
-				"referrer":                  report.Body.Referrer,
-				"property":                  report.Body.Property,
-				"opener_url":                report.Body.OpenerURL,
-				"opened_window_url":         report.Body.OpenedWindowURL,
-				"opened_window_initial_url": report.Body.OpenedWindowInitialURL,
-				"other_url":                 report.Body.OtherURL,
-				"source_file":               report.Body.SourceFile,
-				"line_number":               report.Body.LineNumber,
-				"column_number":             report.Body.ColumnNumber,
-				"metadata":                  metadata,
-				"path":                      r.URL.Path,
+				"report_only":           reportOnly,
+				"url":                   report.URL,
+				"type":                  report.Body.Type,
+				"disposition":           report.Body.Disposition,
+				"effective_policy":      report.Body.EffectivePolicy,
+				"previous_response_url": report.Body.PreviousResponseURL,
+				"next_response_url":     report.Body.NextResponseURL,
+				"referrer":              report.Body.Referrer,
+				"property":              report.Body.Property,
+				"opener_url":            report.Body.OpenerURL,
+				"openee_url":            report.Body.OpeneeURL,
+				"initial_popup_url":     report.Body.InitialPopupURL,
+				"other_document_url":    report.Body.OtherDocumentURL,
+				"source_file":           report.Body.SourceFile,
+				"line_number":           report.Body.LineNumber,
+				"column_number":         report.Body.ColumnNumber,
+				"metadata":              metadata,
+				"path":                  r.URL.Path,
 			}
 
 			if truncateQueryStringFragment {
 				truncateURLFields(lf, "url", "previous_response_url", "next_response_url", "referrer",
-					"opener_url", "opened_window_url", "opened_window_initial_url", "other_url", "source_file")
+					"opener_url", "openee_url", "initial_popup_url", "other_document_url", "source_file")
 			}
 
 			mode := "enforced"

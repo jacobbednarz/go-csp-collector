@@ -86,27 +86,31 @@ Cross-Origin-Opener-Policy: same-origin; report-to="coop-endpoint"
 There's no separate report-only route, since each report's `disposition` says
 whether it came from the report-only header. Each logged COOP report includes:
 
-| Field                       | Description                                                                 |
-| --------------------------- | --------------------------------------------------------------------------- |
-| `report_only`               | `true` when `disposition` is `reporting`                                    |
-| `url`                       | The URL of the document that generated the report                           |
-| `type`                      | `navigation-to-response`, `navigation-from-response` or `access-to-opener`  |
-| `disposition`               | `enforce` or `reporting`                                                    |
-| `effective_policy`          | The COOP value in effect, e.g. `same-origin`                                |
-| `previous_response_url`     | Navigation reports: the response navigated away from                        |
-| `next_response_url`         | Navigation reports: the response navigated to                               |
-| `referrer`                  | The referrer, where the report includes one                                 |
-| `property`                  | Access reports: the window property accessed, e.g. `postMessage`            |
-| `opener_url`                | Access reports: the opener's URL                                            |
-| `opened_window_url`         | Access reports: the opened window's URL                                     |
-| `opened_window_initial_url` | Access reports: the opened window's initial URL                             |
-| `other_url`                 | Access reports: the other window's URL                                      |
-| `source_file`               | Access reports: the script that made the access                             |
-| `line_number`               | Access reports: line of the access in `source_file`                         |
-| `column_number`             | Access reports: column of the access in `source_file`                       |
-| `metadata`                  | Value of the `metadata` query parameter (if present)                        |
-| `path`                      | Path of the collector endpoint that received the report                     |
+| Field                   | Description                                                                                   |
+| ----------------------- | --------------------------------------------------------------------------------------------- |
+| `report_only`           | `true` when `disposition` is `reporting`                                                      |
+| `url`                   | The URL of the document that generated the report                                             |
+| `type`                  | `navigation-to-response`, `navigation-from-response`, or one of the access types listed below |
+| `disposition`           | `enforce` or `reporting`                                                                      |
+| `effective_policy`      | The COOP value in effect, e.g. `same-origin`                                                  |
+| `previous_response_url` | Navigation reports: the response navigated away from                                          |
+| `next_response_url`     | Navigation reports: the response navigated to                                                 |
+| `referrer`              | The referrer, where the report includes one                                                   |
+| `property`              | Access reports: the window property accessed, e.g. `postMessage`                              |
+| `opener_url`            | Access reports: the opener's URL                                                              |
+| `openee_url`            | Access reports: the opened popup's URL                                                        |
+| `initial_popup_url`     | Access reports: the URL the popup was first opened with                                       |
+| `other_document_url`    | Access reports: the other document's URL                                                      |
+| `source_file`           | Access reports: the script that made the access                                               |
+| `line_number`           | Access reports: line of the access in `source_file`                                           |
+| `column_number`         | Access reports: column of the access in `source_file`                                         |
+| `metadata`              | Value of the `metadata` query parameter (if present)                                          |
+| `path`                  | Path of the collector endpoint that received the report                                       |
 
+Access reports have one of six types, naming which side made the access:
+`access-from-coop-page-to-openee`, `access-from-coop-page-to-opener`,
+`access-from-coop-page-to-other`, `access-to-coop-page-from-openee`,
+`access-to-coop-page-from-opener` and `access-to-coop-page-from-other`.
 Fields that don't apply to a report's `type` are logged empty.
 
 #### COEP (Cross-Origin-Embedder-Policy)
