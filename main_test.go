@@ -46,6 +46,59 @@ func TestHandlerForDisallowedMethods(t *testing.T) {
 	}
 }
 
+// Browsers report a blocked URL that isn't http(s) as only its scheme (CSP3
+// "strip URL for use in reports"), while Safari still sends the full URL for
+// hierarchical schemes. The built-in list has to drop both forms, and must not
+// catch the keywords CSP reports for actionable violations.
+func TestDefaultFilterList(t *testing.T) {
+	tests := []struct {
+		name       string
+		blockedURI string
+		wantStatus int
+	}{
+		{"chrome_extension", "chrome-extension", http.StatusBadRequest},
+		{"chrome_extension_full_url", "chrome-extension://abcdef/content.js", http.StatusBadRequest},
+		{"firefox_extension", "moz-extension", http.StatusBadRequest},
+		{"safari_web_extension", "safari-web-extension", http.StatusBadRequest},
+		{"safari_web_extension_full_url", "safari-web-extension://ABC-123/script.js", http.StatusBadRequest},
+		{"safari_legacy_extension", "safari-extension", http.StatusBadRequest},
+		{"edge_legacy_extension", "ms-browser-extension", http.StatusBadRequest},
+		{"firefox_legacy_jar", "jar", http.StatusBadRequest},
+		{"firefox_resource", "resource", http.StatusBadRequest},
+		{"maxthon_addon", "mxaddon-pkg", http.StatusBadRequest},
+		{"trend_micro_toolbar", "tmtbff", http.StatusBadRequest},
+		{"norton", "symres", http.StatusBadRequest},
+		{"about_blank", "about", http.StatusBadRequest},
+		{"about_blank_full_url", "about:blank", http.StatusBadRequest},
+		{"webview_bridge", "wvjbscheme", http.StatusBadRequest},
+		{"webview_bridge_full_url", "wvjbscheme://__wvjb_queue_message__", http.StatusBadRequest},
+		{"baidu_adblock", "nativebaiduhd", http.StatusBadRequest},
+		{"https_resource", "https://example.com/app.js", http.StatusOK},
+		{"inline", "inline", http.StatusOK},
+		{"eval", "eval", http.StatusOK},
+		{"wasm_eval", "wasm-eval", http.StatusOK},
+		{"trusted_types_sink", "trusted-types-sink", http.StatusOK},
+		{"data", "data", http.StatusOK},
+		{"blob", "blob", http.StatusOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := logrus.New()
+			l.SetOutput(&bytes.Buffer{})
+			h := handler.NewCSPHandler(false, defaultBlockedURIs, nil, false, false, false, false, l, nil)
+
+			body := `{"csp-report":{"document-uri":"https://example.com/","blocked-uri":"` + tt.blockedURI + `"}}`
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, httptest.NewRequest("POST", "/csp", strings.NewReader(body)))
+
+			if rr.Code != tt.wantStatus {
+				t.Errorf("blocked-uri %q: got status %d, want %d", tt.blockedURI, rr.Code, tt.wantStatus)
+			}
+		})
+	}
+}
+
 // The Helm chart can't read files outside its own directory, so it ships a
 // copy of the built-in list as the example for custom.filterlist.
 func TestHelmFilterListMatchesBuiltIn(t *testing.T) {

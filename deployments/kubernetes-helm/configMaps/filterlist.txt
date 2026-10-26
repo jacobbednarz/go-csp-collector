@@ -1,25 +1,36 @@
 # hash indicates a comment
-resource://
-chromenull://
-chrome-extension://
-safari-extension://
-mxjscall://
-webviewprogressproxy://
-res://
-mx://
-safari-resource://
-chromeinvoke://
-chromeinvokeimmediate://
-mbinit://
-opera://
-ms-appx://
-ms-appx-web://
+#
+# Each entry is matched as a prefix of the blocked URI. Chrome and Firefox
+# report a blocked URL that isn't http(s) as only its scheme (for example
+# "chrome-extension"), while Safari sends the full URL, so schemes are listed
+# without "://" to match both.
+resource
+chromenull
+chrome-extension
+safari-extension
+safari-web-extension
+moz-extension
+mxjscall
+mxaddon-pkg
+webviewprogressproxy
+res
+mx
+safari-resource
+chromeinvoke
+chromeinvokeimmediate
+mbinit
+opera
+ms-appx
+ms-appx-web
 localhost
 127.0.0.1
-none://
-about:blank
+none
+about
 android-webview
 ms-browser-extension
-wvjbscheme://__wvjb_queue_message__
-nativebaiduhd://adblock
-bdvideo://error
+wvjbscheme
+nativebaiduhd
+bdvideo
+jar
+tmtbff
+symres
