@@ -216,7 +216,7 @@ func TestReportingAPIRoutesAnswerCORSPreflight(t *testing.T) {
 				"Access-Control-Allow-Headers": rr.Header().Get("Access-Control-Allow-Headers"),
 			}
 			want := map[string]string{
-				"Access-Control-Allow-Origin":  "https://site.example",
+				"Access-Control-Allow-Origin":  "*",
 				"Access-Control-Allow-Methods": "POST",
 				"Access-Control-Allow-Headers": "content-type",
 			}
@@ -245,8 +245,8 @@ func TestReportingAPIRoutesSetCORSHeadersOnUpload(t *testing.T) {
 			if rr.Code != http.StatusOK {
 				t.Fatalf("expected 200, got %d", rr.Code)
 			}
-			if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "https://site.example" {
-				t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "https://site.example")
+			if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+				t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "*")
 			}
 		})
 	}

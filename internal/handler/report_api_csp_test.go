@@ -396,8 +396,8 @@ func TestGenericReportAPICSPHandlerSetsCORSHeaderOnActualResponse(t *testing.T) 
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
-	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "https://example.com" {
-		t.Errorf("expected Access-Control-Allow-Origin to echo the request origin, got %q", got)
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("expected Access-Control-Allow-Origin *, got %q", got)
 	}
 }
 
@@ -417,7 +417,7 @@ func TestGenericReportAPICSPHandlerCORSHeaderPresentOnErrorResponses(t *testing.
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", rr.Code)
 	}
-	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "https://example.com" {
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "*" {
 		t.Errorf("expected Access-Control-Allow-Origin on the 422 response too, got %q", got)
 	}
 }
@@ -461,12 +461,13 @@ func TestReportAPICorsHandlerPreflight(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	cases := map[string]string{
-		"Access-Control-Allow-Origin":  "https://example.com",
+		"Access-Control-Allow-Origin":  "*",
 		"Access-Control-Allow-Methods": "POST",
 		"Access-Control-Allow-Headers": "content-type",
 		"Access-Control-Max-Age":       "60",
 		"Cross-Origin-Resource-Policy": "cross-origin",
 		"Server":                       "go-csp-collector",
+		"Vary":                         "Access-Control-Request-Method, Access-Control-Request-Headers",
 	}
 	for header, want := range cases {
 		if got := rr.Header().Get(header); got != want {
