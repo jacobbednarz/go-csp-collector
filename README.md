@@ -136,6 +136,31 @@ Each logged COEP report includes:
 | `metadata`    | Value of the `metadata` query parameter (if present)                     |
 | `path`        | Path of the collector endpoint that received the report                  |
 
+#### Default Reporting API endpoint
+
+- `OPTIONS /reporting-api/default`: CORS preflight handler for the Reporting API.
+- `POST /reporting-api/default`: accepts reports of any type delivered by the Reporting API.
+
+Browsers send some report types to the endpoint named `default` without any
+extra header, such as `deprecation` and `intervention` reports. Others, such as
+`permissions-policy-violation`, fall back to it when their header doesn't name
+an endpoint. Point `default` at this route to collect them:
+
+```http
+Reporting-Endpoints: default="https://collector.example.com/reporting-api/default"
+```
+
+The body's shape depends on the report type, so it's logged as raw JSON rather
+than split into fields. Each logged report includes:
+
+| Field      | Description                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------ |
+| `type`     | The report type, e.g. `deprecation`                                                        |
+| `url`      | The URL of the document that generated the report                                          |
+| `body`     | The report body as raw JSON. Left out when `truncate-query-fragment` is set, since URLs inside it can't be reliably stripped |
+| `metadata` | Value of the `metadata` query parameter (if present)                                       |
+| `path`     | Path of the collector endpoint that received the report                                    |
+
 #### Building for Docker
 
 You will either need to build within a docker container for the purpose, or use `CGO_ENABLED=0` flag
@@ -152,13 +177,14 @@ All endpoints are enabled by default. If you don't use one, turn it off with
 serve. Any group left out has its routes removed entirely, so requests to them
 get a 404 like any other unknown path.
 
-| Group               | Routes                                                                  |
-| ------------------- | ----------------------------------------------------------------------- |
-| `csp`               | `POST /`, `POST /csp`, `POST /csp/report-only`                          |
-| `reporting-api-csp` | `OPTIONS` and `POST /reporting-api/csp`                                 |
-| `nel`               | `OPTIONS` and `POST` for `/nel` and `/nel/report-only`                  |
-| `reporting-api-coop` | `OPTIONS` and `POST /reporting-api/coop`                              |
-| `reporting-api-coep` | `OPTIONS` and `POST /reporting-api/coep`                              |
+| Group                   | Routes                                                 |
+| ----------------------- | ------------------------------------------------------ |
+| `csp`                   | `POST /`, `POST /csp`, `POST /csp/report-only`         |
+| `reporting-api-csp`     | `OPTIONS` and `POST /reporting-api/csp`                |
+| `nel`                   | `OPTIONS` and `POST` for `/nel` and `/nel/report-only` |
+| `reporting-api-coop`    | `OPTIONS` and `POST /reporting-api/coop`               |
+| `reporting-api-coep`    | `OPTIONS` and `POST /reporting-api/coep`               |
+| `reporting-api-default` | `OPTIONS` and `POST /reporting-api/default`            |
 
 For example, to collect CSP reports but not NEL reports:
 
@@ -229,7 +255,7 @@ The collector exports:
 
 | Metric | Type | Labels | Description |
 | ------ | ---- | ------ | ----------- |
-| `csp_collector_reports_total` | Counter | `handler`, `mode` | Successfully processed CSP or Reporting API reports |
+| `csp_collector_reports_total` | Counter | `handler`, `mode` | Successfully processed CSP or Reporting API reports. `mode` is `enforced` or `report_only`, except on `/reporting-api/default`, where it's the report type for known Reporting API types and `reporting-api-default` for anything else |
 | `csp_collector_nel_reports_total` | Counter | `mode` | Successfully processed NEL reports |
 | `csp_collector_reports_filtered_total` | Counter | `handler`, `reason` | Reports dropped by URI/domain filters |
 | `csp_collector_reports_ignored_total` | Counter | `handler`, `reason` | Reports intentionally ignored (for example unsupported NEL types) |
