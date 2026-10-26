@@ -1,23 +1,20 @@
 FROM golang:1.27-alpine AS build
-COPY . /go/src/jacobbednarz/go-csp-collector
-WORKDIR /go/src/jacobbednarz/go-csp-collector
-RUN set -ex \
-  && apk add --no-cache git \
-  && go get -d ./... \
-  && go build -o csp_collector main.go
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG REVISION=dev
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.Rev=${REVISION}" -o /csp_collector .
 
 FROM alpine:3.24.2
 LABEL maintainer="https://github.com/jacobbednarz/go-csp-collector"
-COPY --from=build /go/src/jacobbednarz/go-csp-collector/csp_collector /
+COPY --from=build /csp_collector /
 EXPOSE 8080 9090
 
-RUN mkdir -p /home/csp_collector && \
-    addgroup -Sg 1000 csp_collector &&  \
-    adduser  -SG csp_collector -u 1000 -h /home/csp_collector csp_collector && \
-    chown csp_collector:csp_collector /home/csp_collector
+RUN addgroup -Sg 1000 csp_collector && \
+    adduser -SG csp_collector -u 1000 -h /home/csp_collector csp_collector
 
-USER csp_collector
-
-RUN id csp_collector
+# A numeric user lets Kubernetes verify runAsNonRoot without a runAsUser.
+USER 1000:1000
 
 CMD ["/csp_collector"]

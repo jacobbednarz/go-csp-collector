@@ -157,6 +157,12 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Revision
+        id: revision
+        shell: bash
+        run: |
+          tag="${{ github.event.inputs.ref || github.ref_name }}"
+          echo "revision=${tag#v}+$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v7
@@ -164,6 +170,7 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: REVISION=${{ steps.revision.outputs.revision }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
       - name: Export digest
         run: |
