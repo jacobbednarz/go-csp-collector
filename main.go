@@ -6,12 +6,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"slices"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -23,7 +24,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -36,14 +36,6 @@ var (
 	// was created at.
 	Rev = "dev"
 
-	// Shared defaults for the logger output. This ensures that we are
-	// using the same keys for the `FieldKey` values across both formatters.
-	logFieldMapDefaults = logrus.FieldMap{
-		logrus.FieldKeyTime:  "timestamp",
-		logrus.FieldKeyLevel: "level",
-		logrus.FieldKeyMsg:   "message",
-	}
-
 	// defaultFilterList is the built-in blocked URI filter list. It's
 	// embedded from the sample file so that the file people copy for
 	// --filter-file is always the list the collector actually uses.
@@ -53,13 +45,6 @@ var (
 
 	defaultBlockedURIs = utils.TrimEmptyAndComments(strings.Split(defaultFilterList, "\n"))
 )
-
-var logger = logrus.New()
-
-func init() {
-	logger.SetOutput(os.Stdout)
-	logger.SetLevel(logrus.InfoLevel)
-}
 
 func main() {
 	version := flag.Bool("version", false, "Display the version")
@@ -87,57 +72,53 @@ func main() {
 		os.Exit(0)
 	}
 
+	level := slog.LevelInfo
+	if *debugFlag {
+		level = slog.LevelDebug
+	}
+	logger := slog.New(newLogHandler(os.Stdout, *outputFormat, level))
+
+	// Errors go to stderr so they stay visible when stdout, the reports,
+	// is redirected to a file.
+	errLogger := slog.New(newLogHandler(os.Stderr, *outputFormat, level))
+	fatal := func(msg string, args ...any) {
+		errLogger.Error(msg, args...)
+		os.Exit(1)
+	}
+
 	// Both write the same client_ip field, so one would silently win.
 	if *logClientIP && *logTruncatedClientIP {
-		logrus.Fatal("--log-client-ip and --log-truncated-client-ip can't be combined, pick one")
+		fatal("--log-client-ip and --log-truncated-client-ip can't be combined, pick one")
 	}
 
-	if *debugFlag {
-		logger.SetLevel(logrus.DebugLevel)
-	}
-
-	if *outputFormat == "json" {
-		logger.SetFormatter(&logrus.JSONFormatter{
-			FieldMap: logFieldMapDefaults,
-		})
-	} else {
-		logger.SetFormatter(&logrus.TextFormatter{
-			FullTimestamp:          true,
-			DisableLevelTruncation: true,
-			QuoteEmptyFields:       true,
-			DisableColors:          true,
-			FieldMap:               logFieldMapDefaults,
-		})
-	}
-
-	logger.Debug("starting up...")
+	logger.Debug("starting up")
 	ignoredBlockedURIs := defaultBlockedURIs
 	if *blockedURIFile != "" {
-		logger.Debugf("using Filter list from file at: %s\n", *blockedURIFile)
+		logger.Debug("using filter list from file", "path", *blockedURIFile)
 
 		content, err := os.ReadFile(*blockedURIFile)
 		if err != nil {
-			logrus.Fatalf("error reading Blocked File list: %s", *blockedURIFile)
+			fatal("unable to read filter list", "path", *blockedURIFile, "error", err)
 		}
 		ignoredBlockedURIs = utils.TrimEmptyAndComments(strings.Split(string(content), "\n"))
 	} else {
-		logger.Debug("using filter list from internal list")
+		logger.Debug("using the built-in filter list")
 	}
 
 	var blockedDomains []string
 	if *blockedDomainFile != "" {
-		logger.Debugf("using domain filter list from file at: %s\n", *blockedDomainFile)
+		logger.Debug("using domain filter list from file", "path", *blockedDomainFile)
 
 		content, err := os.ReadFile(*blockedDomainFile)
 		if err != nil {
-			logrus.Fatalf("error reading blocked domain file: %s", *blockedDomainFile)
+			fatal("unable to read domain filter list", "path", *blockedDomainFile, "error", err)
 		}
 		blockedDomains = utils.TrimEmptyAndComments(strings.Split(string(content), "\n"))
 	}
 
 	enabledEndpoints, err := parseEndpoints(*endpoints)
 	if err != nil {
-		logrus.Fatalf("invalid --endpoints value: %s", err)
+		fatal("invalid --endpoints value", "error", err)
 	}
 
 	registry := prometheus.NewRegistry()
@@ -153,21 +134,23 @@ func main() {
 		endpoints:                   enabledEndpoints,
 	}, logger, m)
 
-	logger.Debugf("blocked URI list: %s", ignoredBlockedURIs)
-	logger.Debugf("blocked domain list: %s", blockedDomains)
-	logger.Debugf("enabled endpoints: %s", *endpoints)
-	logger.Debugf("listening on TCP port: %s", strconv.Itoa(*listenPort))
-	logger.Debugf("metrics endpoint listening on %s:%d", *metricsBindAddr, *metricsPort)
+	logger.Debug("configured",
+		"blocked_uris", ignoredBlockedURIs,
+		"blocked_domains", blockedDomains,
+		"endpoints", *endpoints,
+		"port", *listenPort,
+		"metrics_addr", fmt.Sprintf("%s:%d", *metricsBindAddr, *metricsPort),
+	)
 
 	// Bind both listeners up front so a port that's already in use fails
 	// at startup instead of from inside a goroutine.
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", *listenPort))
 	if err != nil {
-		logrus.Fatalf("unable to listen for reports: %s", err)
+		fatal("unable to listen for reports", "error", err)
 	}
 	metricsLn, err := net.Listen("tcp", fmt.Sprintf("%s:%d", *metricsBindAddr, *metricsPort))
 	if err != nil {
-		logrus.Fatalf("unable to listen for metrics: %s", err)
+		fatal("unable to listen for metrics", "error", err)
 	}
 
 	metricsMux := http.NewServeMux()
@@ -185,7 +168,7 @@ func main() {
 	failed := false
 	for range 2 {
 		if err := <-errs; err != nil {
-			logger.Error(err)
+			errLogger.Error("server stopped", "error", err)
 			failed = true
 			stop()
 		}
@@ -193,6 +176,44 @@ func main() {
 	if failed {
 		os.Exit(1)
 	}
+}
+
+// newLogHandler writes logs in the given format with the timestamp, level
+// and message keys the collector has always used, so existing log parsers
+// keep working.
+func newLogHandler(w io.Writer, format string, level slog.Leveler) slog.Handler {
+	json := format == "json"
+	opts := &slog.HandlerOptions{
+		Level: level,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if len(groups) > 0 {
+				return a
+			}
+
+			switch a.Key {
+			case slog.TimeKey:
+				return slog.String("timestamp", a.Value.Time().Format(time.RFC3339))
+			case slog.LevelKey:
+				if a.Value.Any() == slog.LevelWarn {
+					return slog.String("level", "warning")
+				}
+				return slog.String("level", strings.ToLower(a.Value.String()))
+			case slog.MessageKey:
+				// Report lines have no message. Text output has always
+				// left the empty key out, while JSON has always kept it.
+				if !json && a.Value.String() == "" {
+					return slog.Attr{}
+				}
+				return slog.String("message", a.Value.String())
+			}
+			return a
+		},
+	}
+
+	if json {
+		return slog.NewJSONHandler(w, opts)
+	}
+	return slog.NewTextHandler(w, opts)
 }
 
 // shutdownTimeout is how long in-flight requests get to finish after a
@@ -268,7 +289,7 @@ func parseEndpoints(value string) (map[string]bool, error) {
 
 // newRouter registers the report endpoints for each enabled group, kept
 // out of main so the route table itself can be tested.
-func newRouter(cfg routerConfig, logger *logrus.Logger, m *metrics.Metrics) *mux.Router {
+func newRouter(cfg routerConfig, logger *slog.Logger, m *metrics.Metrics) *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc(cfg.healthCheckPath, handler.HealthcheckHandler).Methods("GET")
 

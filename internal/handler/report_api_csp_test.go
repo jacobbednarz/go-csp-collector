@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -12,13 +13,10 @@ import (
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/sirupsen/logrus"
-	logtest "github.com/sirupsen/logrus/hooks/test"
 )
 
 func TestGenericReportAPICSPHandlerDisallowedMethods(t *testing.T) {
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, nil)
 
 	for _, method := range []string{"GET", "PUT", "DELETE", "PATCH", "TRACE"} {
@@ -38,8 +36,7 @@ func TestGenericReportAPICSPHandlerRejectsBareObject(t *testing.T) {
 	// valid but non-array body must still be rejected.
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, m)
 
 	body := []byte(`{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/app.js","documentURL":"https://example.com","disposition":"report"}}`)
@@ -109,8 +106,7 @@ func TestGenericReportAPICSPHandlerWellFormedBatch(t *testing.T) {
     }
 ]`)
 
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 	h := NewReportAPICSPHandler(invalidBlockedURIs, nil, false, false, false, false, l, nil)
 
 	req := httptest.NewRequest("POST", "/reporting-api/csp", bytes.NewBuffer(rawReport))
@@ -125,8 +121,7 @@ func TestGenericReportAPICSPHandlerWellFormedBatch(t *testing.T) {
 func TestGenericReportAPICSPHandlerMetricsDecodeError(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, m)
 	req := httptest.NewRequest("POST", "/reporting-api/csp", bytes.NewBufferString("bad-json"))
@@ -144,8 +139,7 @@ func TestGenericReportAPICSPHandlerMetricsDecodeError(t *testing.T) {
 func TestGenericReportAPICSPHandlerMetricsFilteredURI(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := NewReportAPICSPHandler([]string{"inline"}, nil, false, false, false, false, l, m)
 	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"inline","documentURL":"https://example.com","disposition":"enforce"}}]`)
@@ -162,8 +156,7 @@ func TestGenericReportAPICSPHandlerMetricsFilteredURI(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerValidationRejectionWithNilMetrics(t *testing.T) {
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := NewReportAPICSPHandler([]string{"inline"}, nil, false, false, false, false, l, nil)
 	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"inline","documentURL":"https://example.com","disposition":"enforce"}}]`)
@@ -179,8 +172,7 @@ func TestGenericReportAPICSPHandlerValidationRejectionWithNilMetrics(t *testing.
 func TestGenericReportAPICSPHandlerMetricsFilteredDomain(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := NewReportAPICSPHandler(nil, []string{"evil.example.com"}, false, false, false, false, l, m)
 	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"https://evil.example.com/x.js","documentURL":"https://example.com","disposition":"enforce"}}]`)
@@ -199,8 +191,7 @@ func TestGenericReportAPICSPHandlerMetricsFilteredDomain(t *testing.T) {
 func TestGenericReportAPICSPHandlerMetricsValidationError(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, m)
 	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/app.js","documentURL":"about:blank","disposition":"enforce"}}]`)
@@ -222,9 +213,7 @@ func TestGenericReportAPICSPHandlerMetricsValidationError(t *testing.T) {
 func TestGenericReportAPICSPHandlerFilteredReportKeepsRestOfBatch(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
+	l, logBuf := newTestLogger()
 
 	h := NewReportAPICSPHandler([]string{"chrome-extension://"}, nil, false, false, false, false, l, m)
 	body := []byte(`[
@@ -253,8 +242,7 @@ func TestGenericReportAPICSPHandlerFilteredReportKeepsRestOfBatch(t *testing.T) 
 func TestGenericReportAPICSPHandlerMetricsSuccess(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, m)
 	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/app.js","documentURL":"https://example.com","disposition":"report"}}]`)
@@ -273,8 +261,7 @@ func TestGenericReportAPICSPHandlerMetricsSuccess(t *testing.T) {
 func TestGenericReportAPICSPHandlerMetricsSuccessEnforced(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, m)
 	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/app.js","documentURL":"https://example.com","disposition":"enforce"}}]`)
@@ -291,9 +278,7 @@ func TestGenericReportAPICSPHandlerMetricsSuccessEnforced(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerTruncatesQueryStringFragment(t *testing.T) {
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
+	l, rec := newRecordingLogger(slog.LevelInfo)
 	h := NewReportAPICSPHandler(nil, nil, true, false, false, false, l, nil)
 
 	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/app.js?a=b#frag","documentURL":"https://example.com/?a=b#frag","referrer":"https://ref.example.com/?a=b#frag","sourceFile":"https://example.com/app.js?a=b#frag","disposition":"report"}}]`)
@@ -304,19 +289,20 @@ func TestGenericReportAPICSPHandlerTruncatesQueryStringFragment(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	out := logBuf.String()
-	if strings.Contains(out, "?a=b") || strings.Contains(out, "#frag") {
-		t.Errorf("expected query string and fragment to be truncated, got: %s", out)
+	got := urlFields(t, rec, "document_uri", "referrer", "blocked_uri", "source_file")
+	want := Fields{
+		"document_uri": "https://example.com/",
+		"referrer":     "https://ref.example.com/",
+		"blocked_uri":  "https://cdn.example.com/app.js",
+		"source_file":  "https://example.com/app.js",
 	}
-	if !strings.Contains(out, "document_uri=\"https://example.com/\"") {
-		t.Errorf("expected truncated document_uri, got: %s", out)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("truncated fields = %v, want %v", got, want)
 	}
 }
 
 func TestGenericReportAPICSPHandlerSkipsNonCSPViolationReports(t *testing.T) {
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
+	l, logBuf := newTestLogger()
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, nil)
 
 	body := []byte(`[{"type":"deprecation","body":{"blockedURL":"https://example.com/"}}]`)
@@ -333,10 +319,7 @@ func TestGenericReportAPICSPHandlerSkipsNonCSPViolationReports(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerMixedBatchPreservesWellFormedReport(t *testing.T) {
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
-	l.SetLevel(logrus.DebugLevel)
+	l, logBuf := newTestLoggerAtLevel(slog.LevelDebug)
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, nil)
 
 	payload := []byte(`[
@@ -361,9 +344,7 @@ func TestGenericReportAPICSPHandlerMixedBatchPreservesWellFormedReport(t *testin
 }
 
 func TestGenericReportAPICSPHandlerMetadata(t *testing.T) {
-	var logBuf bytes.Buffer
-	l := logrus.New()
-	l.SetOutput(&logBuf)
+	l, logBuf := newTestLogger()
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, nil)
 
 	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/app.js","documentURL":"https://example.com","disposition":"report"}}]`)
@@ -386,8 +367,7 @@ func TestGenericReportAPICSPHandlerSetsCORSHeaderOnActualResponse(t *testing.T) 
 	// to the real response too, not just the preflight, so this caused
 	// real report deliveries to be rejected client-side as a CORS failure
 	// even though the server received and logged them successfully.
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, nil)
 	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/app.js","documentURL":"https://example.com","disposition":"report"}}]`)
@@ -405,8 +385,7 @@ func TestGenericReportAPICSPHandlerCORSHeaderPresentOnErrorResponses(t *testing.
 	// The CORS header needs to be on every response the handler can
 	// produce, not just the 200 path - a browser applies its CORS check
 	// regardless of status code.
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, nil)
 	req := httptest.NewRequest("POST", "/reporting-api/csp", strings.NewReader("not json"))
@@ -423,8 +402,7 @@ func TestGenericReportAPICSPHandlerCORSHeaderPresentOnErrorResponses(t *testing.
 }
 
 func TestGenericReportAPICSPHandlerCORSFallsBackToWildcardWithNoOrigin(t *testing.T) {
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l, _ := newTestLogger()
 
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, nil)
 	body := []byte(`[{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/app.js","documentURL":"https://example.com","disposition":"report"}}]`)
@@ -500,9 +478,7 @@ func TestReportAPICorsHandlerPreflightDefaultsWithoutRequestHeaders(t *testing.T
 // blocked code as `sample` when the policy has 'report-sample'. It's logged
 // under the same field name as the legacy handler's script-sample.
 func TestGenericReportAPICSPHandlerLogsSample(t *testing.T) {
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
-	hook := logtest.NewLocal(l)
+	l, rec := newRecordingLogger(slog.LevelInfo)
 	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, nil)
 
 	body := []byte(`[{"type":"csp-violation","url":"https://example.com/","body":{
@@ -517,7 +493,7 @@ func TestGenericReportAPICSPHandlerLogsSample(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	want := logrus.Fields{
+	want := Fields{
 		"report_only":         false,
 		"document_uri":        "https://example.com/",
 		"referrer":            "",
@@ -534,7 +510,7 @@ func TestGenericReportAPICSPHandlerLogsSample(t *testing.T) {
 		"metadata":            nil,
 		"path":                "/reporting-api/csp",
 	}
-	entries := hook.AllEntries()
+	entries := rec.Entries()
 	if len(entries) != 1 {
 		t.Fatalf("got %d log entries, want 1", len(entries))
 	}

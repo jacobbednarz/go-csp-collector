@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -10,8 +11,6 @@ import (
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/sirupsen/logrus"
-	logtest "github.com/sirupsen/logrus/hooks/test"
 )
 
 func TestReportAPICOOPHandlerLogsReport(t *testing.T) {
@@ -19,14 +18,14 @@ func TestReportAPICOOPHandlerLogsReport(t *testing.T) {
 		name     string
 		truncate bool
 		body     string
-		want     logrus.Fields
+		want     Fields
 	}{
 		{
 			name: "navigation_to_response",
 			body: `[{"type":"coop","url":"https://example.com/page?q=1","age":10,"user_agent":"t","body":{
 				"disposition":"enforce","effectivePolicy":"same-origin","type":"navigation-to-response",
 				"previousResponseURL":"https://other.example/prev?token=abc","referrer":"https://other.example/ref"}}]`,
-			want: logrus.Fields{
+			want: Fields{
 				"report_only":           false,
 				"url":                   "https://example.com/page?q=1",
 				"type":                  "navigation-to-response",
@@ -53,7 +52,7 @@ func TestReportAPICOOPHandlerLogsReport(t *testing.T) {
 				"disposition":"reporting","effectivePolicy":"same-origin-plus-coep","type":"access-from-coop-page-to-openee",
 				"property":"blur","openeeURL":"https://example.com/popup","initialPopupURL":"https://example.com/login?flow=123",
 				"sourceFile":"https://example.com/app.js","lineNumber":12,"columnNumber":4}}]`,
-			want: logrus.Fields{
+			want: Fields{
 				"report_only":           true,
 				"url":                   "https://example.com/opener",
 				"type":                  "access-from-coop-page-to-openee",
@@ -79,7 +78,7 @@ func TestReportAPICOOPHandlerLogsReport(t *testing.T) {
 			body: `[{"type":"coop","url":"https://example.com/","body":{
 				"disposition":"reporting","effectivePolicy":"same-origin","type":"access-to-coop-page-from-other",
 				"property":"postMessage","otherDocumentURL":"https://other.example/doc"}}]`,
-			want: logrus.Fields{
+			want: Fields{
 				"report_only":           true,
 				"url":                   "https://example.com/",
 				"type":                  "access-to-coop-page-from-other",
@@ -109,7 +108,7 @@ func TestReportAPICOOPHandlerLogsReport(t *testing.T) {
 				"referrer":"https://a.example/r?x=1","openerURL":"https://a.example/o?x=1",
 				"openeeURL":"https://a.example/w?x=1","initialPopupURL":"https://a.example/i?x=1",
 				"otherDocumentURL":"https://a.example/other?x=1","sourceFile":"https://a.example/app.js?v=2"}}]`,
-			want: logrus.Fields{
+			want: Fields{
 				"report_only":           false,
 				"url":                   "https://example.com/page",
 				"type":                  "access-from-coop-page-to-openee",
@@ -134,8 +133,7 @@ func TestReportAPICOOPHandlerLogsReport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l, _ := newTestLogger()
-			hook := logtest.NewLocal(l)
+			l, rec := newRecordingLogger(slog.LevelInfo)
 			h := NewReportAPICOOPHandler(tt.truncate, false, false, false, l, nil)
 
 			rr := httptest.NewRecorder()
@@ -144,7 +142,7 @@ func TestReportAPICOOPHandlerLogsReport(t *testing.T) {
 			if rr.Code != http.StatusOK {
 				t.Fatalf("expected 200, got %d", rr.Code)
 			}
-			entries := hook.AllEntries()
+			entries := rec.Entries()
 			if len(entries) != 1 {
 				t.Fatalf("got %d log entries, want 1", len(entries))
 			}

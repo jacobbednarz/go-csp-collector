@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"bytes"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -12,8 +12,6 @@ import (
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/sirupsen/logrus"
-	logtest "github.com/sirupsen/logrus/hooks/test"
 )
 
 // testReport is a minimal ReportTyped implementation used to exercise
@@ -26,16 +24,9 @@ type testReport struct {
 
 func (t testReport) ReportType() string { return t.Type }
 
-func newTestLogger() (*logrus.Logger, *bytes.Buffer) {
-	l := logrus.New()
-	var buf bytes.Buffer
-	l.SetOutput(&buf)
-	return l, &buf
-}
-
 func passthroughProcess(report testReport, r *http.Request, metadata interface{}) ProcessResult {
 	return ProcessResult{
-		Fields: logrus.Fields{"value": report.Value, "metadata": metadata, "path": r.URL.Path},
+		Fields: Fields{"value": report.Value, "metadata": metadata, "path": r.URL.Path},
 		Mode:   "enforced",
 	}
 }
@@ -179,8 +170,7 @@ func TestBatchReportHandlerBodyReadError(t *testing.T) {
 func TestBatchReportHandlerBodyTooLarge(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l, buf := newTestLogger()
-	l.SetLevel(logrus.DebugLevel)
+	l, buf := newTestLoggerAtLevel(slog.LevelDebug)
 	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Metrics: m, Process: passthroughProcess}
 
 	body := `[{"type":"x","value":"` + strings.Repeat("a", maxBodyBytes) + `"}]`
@@ -220,8 +210,7 @@ type errReader struct{}
 func (errReader) Read(p []byte) (int, error) { return 0, errors.New("simulated read failure") }
 
 func TestBatchReportHandlerItemDecodeErrorSkipsAndContinues(t *testing.T) {
-	l, buf := newTestLogger()
-	l.SetLevel(logrus.DebugLevel)
+	l, buf := newTestLoggerAtLevel(slog.LevelDebug)
 	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Process: passthroughProcess}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"good"},{"type":"x","value":123}]`))
@@ -245,20 +234,21 @@ func TestBatchReportHandlerItemDecodeErrorSkipsAndContinues(t *testing.T) {
 func TestBatchReportHandlerItemDecodeErrorLogLevel(t *testing.T) {
 	tests := []struct {
 		name        string
-		level       logrus.Level
-		wantEntries []*logrus.Entry
+		level       slog.Level
+		wantEntries []logEntry
 	}{
 		{
 			name:        "hidden_at_info",
-			level:       logrus.InfoLevel,
+			level:       slog.LevelInfo,
 			wantEntries: nil,
 		},
 		{
 			name:  "logged_at_debug",
-			level: logrus.DebugLevel,
-			wantEntries: []*logrus.Entry{{
-				Level: logrus.DebugLevel,
-				Data: logrus.Fields{
+			level: slog.LevelDebug,
+			wantEntries: []logEntry{{
+				Level:   slog.LevelDebug,
+				Message: "skipping a report that couldn't be decoded",
+				Data: Fields{
 					"reason": "item_decode_error",
 					"body":   `{"type":"x","value":123}`,
 					"path":   "/batch",
@@ -269,9 +259,7 @@ func TestBatchReportHandlerItemDecodeErrorLogLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l, _ := newTestLogger()
-			l.SetLevel(tt.level)
-			hook := logtest.NewLocal(l)
+			l, rec := newRecordingLogger(tt.level)
 			h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Process: passthroughProcess}
 
 			req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":123}]`))
@@ -281,14 +269,8 @@ func TestBatchReportHandlerItemDecodeErrorLogLevel(t *testing.T) {
 			if rr.Code != http.StatusOK {
 				t.Fatalf("expected 200, got %d", rr.Code)
 			}
-			got := hook.AllEntries()
-			if len(got) != len(tt.wantEntries) {
-				t.Fatalf("got %d log entries, want %d: %v", len(got), len(tt.wantEntries), got)
-			}
-			for i, want := range tt.wantEntries {
-				if got[i].Level != want.Level || !reflect.DeepEqual(got[i].Data, want.Data) {
-					t.Errorf("entry %d = {%s %v}, want {%s %v}", i, got[i].Level, got[i].Data, want.Level, want.Data)
-				}
+			if got := rec.Entries(); !reflect.DeepEqual(got, tt.wantEntries) {
+				t.Errorf("log entries = %+v, want %+v", got, tt.wantEntries)
 			}
 		})
 	}
@@ -399,8 +381,7 @@ func TestBatchReportHandlerValidateRejectsWithOverrideMetric(t *testing.T) {
 func TestBatchReportHandlerValidateSkipsRejectedItemInBatch(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-	l, _ := newTestLogger()
-	hook := logtest.NewLocal(l)
+	l, rec := newRecordingLogger(slog.LevelInfo)
 	h := &BatchReportHandler[testReport]{
 		HandlerName: "test",
 		Logger:      l,
@@ -421,8 +402,8 @@ func TestBatchReportHandlerValidateSkipsRejectedItemInBatch(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	wantData := logrus.Fields{"value": "good", "metadata": nil, "path": "/batch"}
-	got := hook.AllEntries()
+	wantData := Fields{"value": "good", "metadata": nil, "path": "/batch"}
+	got := rec.Entries()
 	if len(got) != 1 || !reflect.DeepEqual(got[0].Data, wantData) {
 		t.Fatalf("expected only the good report logged as %v, got %v", wantData, got)
 	}

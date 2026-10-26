@@ -2,12 +2,12 @@ package handler
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
-	log "github.com/sirupsen/logrus"
 )
 
 // NELReport is the structure of a single NEL report as delivered by the
@@ -36,7 +36,7 @@ type NELReportBody struct {
 }
 
 // NewNELHandler builds a NEL report handler on BatchReportHandler.
-func NewNELHandler(reportOnly, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *log.Logger, m *metrics.Metrics) http.Handler {
+func NewNELHandler(reportOnly, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *slog.Logger, m *metrics.Metrics) http.Handler {
 	return &BatchReportHandler[NELReport]{
 		HandlerName:          "nel",
 		ExpectedType:         "network-error",
@@ -81,7 +81,7 @@ func NewNELHandler(reportOnly, truncateQueryStringFragment, logClientIP, logTrun
 			}
 
 			return ProcessResult{
-				Fields: log.Fields{
+				Fields: Fields{
 					"report_only":       reportOnly,
 					"url":               url,
 					"referrer":          referrer,

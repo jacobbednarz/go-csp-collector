@@ -7,7 +7,6 @@ toolchain go1.27.3
 require (
 	github.com/gorilla/mux v1.8.1
 	github.com/prometheus/client_golang v1.25.0
-	github.com/sirupsen/logrus v1.10.2
 )
 
 require (

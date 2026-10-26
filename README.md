@@ -330,8 +330,9 @@ format, and `metadata="map[env:production mode:enforce]"` in text format.
 The output format can be controlled by passing `--output-format <type>`
 to the executable. Available formats are:
 
-- **Text**: A key/value output that quotes all the values. Example:
-  `blocked_uri="about:blank" ...`
+- **Text**: [logfmt](https://brandur.org/logfmt) key/value pairs, quoting
+  values that are empty or contain spaces, quotes or `=`. Example:
+  `blocked_uri=inline document_uri="https://example.com/a b" ...`
 - **JSON**: Single line, compressed JSON object. Example:
   `{"blocked_uri":"about:blank"}`
 

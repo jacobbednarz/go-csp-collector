@@ -2,13 +2,13 @@ package handler
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
-	log "github.com/sirupsen/logrus"
 )
 
 // isBlockedByDomain returns true when the hostname of blockedURI exactly
@@ -62,7 +62,7 @@ type CSPReportBody struct {
 }
 
 // NewCSPHandler builds the legacy report-uri CSP handler on BatchReportHandler.
-func NewCSPHandler(reportOnly bool, blockedURIs, blockedDomains []string, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *log.Logger, m *metrics.Metrics) http.Handler {
+func NewCSPHandler(reportOnly bool, blockedURIs, blockedDomains []string, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *slog.Logger, m *metrics.Metrics) http.Handler {
 	return &BatchReportHandler[CSPReport]{
 		HandlerName:    "csp",
 		SingleObject:   true,
@@ -114,7 +114,7 @@ func NewCSPHandler(reportOnly bool, blockedURIs, blockedDomains []string, trunca
 				reportOnly = false
 			}
 
-			lf := log.Fields{
+			lf := Fields{
 				"report_only":         reportOnly,
 				"document_uri":        report.Body.DocumentURI,
 				"referrer":            report.Body.Referrer,

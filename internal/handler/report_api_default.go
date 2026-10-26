@@ -3,12 +3,12 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
-	log "github.com/sirupsen/logrus"
 )
 
 // DefaultReport is any report delivered to a Reporting API "default"
@@ -42,7 +42,7 @@ var knownReportTypes = []string{
 }
 
 // NewReportAPIDefaultHandler builds the reporting-api/default handler on BatchReportHandler.
-func NewReportAPIDefaultHandler(truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *log.Logger, m *metrics.Metrics) http.Handler {
+func NewReportAPIDefaultHandler(truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *slog.Logger, m *metrics.Metrics) http.Handler {
 	return &BatchReportHandler[DefaultReport]{
 		HandlerName:          "reporting_api_default",
 		MetadataObject:       metadataObject,
@@ -61,7 +61,7 @@ func NewReportAPIDefaultHandler(truncateQueryStringFragment, logClientIP, logTru
 		},
 
 		Process: func(report DefaultReport, r *http.Request, metadata interface{}) ProcessResult {
-			lf := log.Fields{
+			lf := Fields{
 				"type":     report.Type,
 				"url":      report.URL,
 				"metadata": metadata,
