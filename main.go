@@ -1,15 +1,20 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/handler"
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
@@ -149,14 +154,74 @@ func main() {
 	logger.Debugf("listening on TCP port: %s", strconv.Itoa(*listenPort))
 	logger.Debugf("metrics endpoint listening on %s:%d", *metricsBindAddr, *metricsPort)
 
-	go func() {
-		metricsMux := http.NewServeMux()
-		metricsMux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
-		metricsAddress := fmt.Sprintf("%s:%d", *metricsBindAddr, *metricsPort)
-		logger.Fatal(http.ListenAndServe(metricsAddress, metricsMux))
-	}()
+	// Bind both listeners up front so a port that's already in use fails
+	// at startup instead of from inside a goroutine.
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", *listenPort))
+	if err != nil {
+		logrus.Fatalf("unable to listen for reports: %s", err)
+	}
+	metricsLn, err := net.Listen("tcp", fmt.Sprintf("%s:%d", *metricsBindAddr, *metricsPort))
+	if err != nil {
+		logrus.Fatalf("unable to listen for metrics: %s", err)
+	}
 
-	logger.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), r))
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errs := make(chan error, 2)
+	go func() { errs <- serve(ctx, newServer(metricsMux), metricsLn) }()
+	go func() { errs <- serve(ctx, newServer(r), ln) }()
+
+	// Either server failing stops the other, so the process exits rather
+	// than carrying on with only one of its listeners.
+	failed := false
+	for range 2 {
+		if err := <-errs; err != nil {
+			logger.Error(err)
+			failed = true
+			stop()
+		}
+	}
+	if failed {
+		os.Exit(1)
+	}
+}
+
+// shutdownTimeout is how long in-flight requests get to finish after a
+// SIGTERM. It's well inside Kubernetes' default 30 second grace period.
+const shutdownTimeout = 10 * time.Second
+
+// newServer sets timeouts so a slow client can't hold a connection open
+// indefinitely. ReadTimeout leaves room for a full size batch on a slow
+// mobile connection.
+func newServer(h http.Handler) *http.Server {
+	return &http.Server{
+		Handler:           h,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
+}
+
+// serve runs srv on ln until ctx is cancelled, then shuts it down, giving
+// in-flight requests up to shutdownTimeout to finish.
+func serve(ctx context.Context, srv *http.Server, ln net.Listener) error {
+	errs := make(chan error, 1)
+	go func() { errs <- srv.Serve(ln) }()
+
+	select {
+	case err := <-errs:
+		return err
+	case <-ctx.Done():
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
+	defer cancel()
+	return srv.Shutdown(shutdownCtx)
 }
 
 // routerConfig holds the flag values that shape how reports are handled.

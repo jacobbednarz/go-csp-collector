@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -345,5 +347,80 @@ func TestNewRouterOnlyRegistersEnabledEndpoints(t *testing.T) {
 				t.Errorf("health check status = %d, want 200", rr.Code)
 			}
 		})
+	}
+}
+
+// Without timeouts a client can hold a connection open indefinitely by
+// sending its headers or body slowly.
+func TestNewServerSetsTimeouts(t *testing.T) {
+	h := http.NewServeMux()
+	got := newServer(h)
+	want := &http.Server{
+		Handler:           h,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("newServer() = %+v, want %+v", got, want)
+	}
+}
+
+// A rollout sends SIGTERM to the old pod while it may still be handling
+// reports. Those requests should finish rather than be cut off.
+func TestServeFinishesInFlightRequestsOnShutdown(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	started := make(chan struct{})
+	srv := newServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(started)
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- serve(ctx, srv, ln) }()
+
+	status := make(chan int, 1)
+	go func() {
+		r, err := http.Post("http://"+ln.Addr().String(), "application/json", nil)
+		if err != nil {
+			t.Errorf("in-flight request failed: %v", err)
+			status <- 0
+			return
+		}
+		r.Body.Close()
+		status <- r.StatusCode
+	}()
+
+	<-started
+	cancel()
+
+	if got := <-status; got != http.StatusOK {
+		t.Errorf("in-flight request got %d, want 200", got)
+	}
+	if err := <-served; err != nil {
+		t.Errorf("serve() = %v, want nil after a clean shutdown", err)
+	}
+	if r, err := http.Post("http://"+ln.Addr().String(), "application/json", nil); err == nil {
+		r.Body.Close()
+		t.Error("expected new connections to be refused after shutdown")
+	}
+}
+
+func TestServeReturnsListenerErrors(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln.Close()
+
+	if err := serve(context.Background(), newServer(http.NewServeMux()), ln); err == nil {
+		t.Error("serve() = nil, want the error from a closed listener")
 	}
 }
