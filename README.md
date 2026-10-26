@@ -78,6 +78,29 @@ to make the build compatible with alpine linux in a docker container.
 $ CGO_ENABLED=0 go build -o csp_collector main.go
 ```
 
+### Disabling endpoints
+
+All endpoints are enabled by default. If you don't use one, turn it off with
+`--endpoints`, which takes a comma separated list of the endpoint groups to
+serve. Any group left out has its routes removed entirely, so requests to them
+get a 404 like any other unknown path.
+
+| Group               | Routes                                                                  |
+| ------------------- | ----------------------------------------------------------------------- |
+| `csp`               | `POST /`, `POST /csp`, `POST /csp/report-only`                          |
+| `reporting-api-csp` | `OPTIONS` and `POST /reporting-api/csp`                                 |
+| `nel`               | `OPTIONS` and `POST` for `/nel` and `/nel/report-only`                  |
+
+For example, to collect CSP reports but not NEL reports:
+
+```sh
+csp_collector --endpoints csp,reporting-api-csp
+```
+
+The collector refuses to start if the list names an unknown group or is empty,
+so a typo can't quietly switch an endpoint off. The health check is always
+served.
+
 ### Command Line Options
 
 | Flag                    | Description                                                                                                                                                                                       |
@@ -94,6 +117,7 @@ $ CGO_ENABLED=0 go build -o csp_collector main.go
 | log-truncated-client-ip | Include a field in the log with the truncated IP (to /24 for IPv4, /64 for IPv6) delivering the report, or the value of the `X-Forwarded-For` header, if present. Conflicts with `log-client-ip`. |
 | truncate-query-fragment | Remove all query strings and fragments (if set) from all URLs transmitted by the client                                                                                                           |
 | query-params-metadata   | Log all query parameters of the report URL as a map in the `metadata` field                                                                                                                       |
+| endpoints               | Comma separated list of endpoint groups to serve: `csp`, `reporting-api-csp` and `nel`. Defaults to all of them. See [Disabling endpoints](#disabling-endpoints).                                |
 
 See the `sample.filterlist.txt` file as an example of the URI prefix filter list, and
 `sample.domainlist.txt` as an example of the domain filter list.

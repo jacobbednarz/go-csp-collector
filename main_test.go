@@ -129,7 +129,7 @@ func TestMetricsEndpointUsesCustomRegistry(t *testing.T) {
 // Access-Control-Allow-Origin and Access-Control-Allow-Headers covering
 // content-type, and otherwise drops the batch and backs off the endpoint.
 func TestReportingAPIRoutesAnswerCORSPreflight(t *testing.T) {
-	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath}, logrus.New(), metrics.New(prometheus.NewRegistry()))
+	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t)}, logrus.New(), metrics.New(prometheus.NewRegistry()))
 
 	for _, path := range []string{"/nel", "/nel/report-only", "/reporting-api/csp"} {
 		t.Run(path, func(t *testing.T) {
@@ -165,7 +165,7 @@ func TestReportingAPIRoutesAnswerCORSPreflight(t *testing.T) {
 func TestReportingAPIRoutesSetCORSHeadersOnUpload(t *testing.T) {
 	logger := logrus.New()
 	logger.SetOutput(&bytes.Buffer{})
-	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath}, logger, metrics.New(prometheus.NewRegistry()))
+	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t)}, logger, metrics.New(prometheus.NewRegistry()))
 
 	for _, path := range []string{"/nel", "/nel/report-only", "/reporting-api/csp"} {
 		t.Run(path, func(t *testing.T) {
@@ -180,6 +180,98 @@ func TestReportingAPIRoutesSetCORSHeadersOnUpload(t *testing.T) {
 			}
 			if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "https://site.example" {
 				t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "https://site.example")
+			}
+		})
+	}
+}
+
+func allEndpoints(t *testing.T) map[string]bool {
+	t.Helper()
+	enabled, err := parseEndpoints(strings.Join(endpointGroups, ","))
+	if err != nil {
+		t.Fatalf("parsing default endpoints: %v", err)
+	}
+	return enabled
+}
+
+func TestParseEndpoints(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		want    map[string]bool
+		wantErr string
+	}{
+		{name: "all_groups", value: "csp,reporting-api-csp,nel", want: map[string]bool{"csp": true, "reporting-api-csp": true, "nel": true}},
+		{name: "single_group", value: "csp", want: map[string]bool{"csp": true}},
+		{name: "surrounding_whitespace", value: " csp , nel ", want: map[string]bool{"csp": true, "nel": true}},
+		{name: "duplicates_and_empty_entries", value: "nel,,nel,", want: map[string]bool{"nel": true}},
+		{name: "unknown_group", value: "csp,nell", wantErr: `unknown endpoint "nell", valid endpoints are: csp, reporting-api-csp, nel`},
+		{name: "empty", value: "", wantErr: "at least one endpoint must be enabled"},
+		{name: "only_separators", value: " , ", wantErr: "at least one endpoint must be enabled"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseEndpoints(tt.value)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Fatalf("error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parseEndpoints(%q) = %v, want %v", tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
+// Every route belongs to exactly one endpoint group. A disabled group's
+// routes must not be registered at all, so they fall through to the 404
+// handler, while the health check stays available regardless.
+func TestNewRouterOnlyRegistersEnabledEndpoints(t *testing.T) {
+	routes := []struct {
+		group  string
+		method string
+		path   string
+	}{
+		{group: "csp", method: http.MethodPost, path: "/"},
+		{group: "csp", method: http.MethodPost, path: "/csp"},
+		{group: "csp", method: http.MethodPost, path: "/csp/report-only"},
+		{group: "reporting-api-csp", method: http.MethodOptions, path: "/reporting-api/csp"},
+		{group: "reporting-api-csp", method: http.MethodPost, path: "/reporting-api/csp"},
+		{group: "nel", method: http.MethodOptions, path: "/nel"},
+		{group: "nel", method: http.MethodPost, path: "/nel"},
+		{group: "nel", method: http.MethodOptions, path: "/nel/report-only"},
+		{group: "nel", method: http.MethodPost, path: "/nel/report-only"},
+	}
+
+	for _, enabled := range []string{"csp", "reporting-api-csp", "nel", "csp,nel", "csp,reporting-api-csp,nel"} {
+		t.Run(enabled, func(t *testing.T) {
+			endpoints, err := parseEndpoints(enabled)
+			if err != nil {
+				t.Fatalf("parseEndpoints(%q): %v", enabled, err)
+			}
+			logger := logrus.New()
+			logger.SetOutput(&bytes.Buffer{})
+			r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: endpoints}, logger, metrics.New(prometheus.NewRegistry()))
+
+			for _, route := range routes {
+				rr := httptest.NewRecorder()
+				r.ServeHTTP(rr, httptest.NewRequest(route.method, route.path, strings.NewReader("[]")))
+
+				if gotRegistered, wantRegistered := rr.Code != http.StatusNotFound, endpoints[route.group]; gotRegistered != wantRegistered {
+					t.Errorf("%s %s: registered = %v (status %d), want %v", route.method, route.path, gotRegistered, rr.Code, wantRegistered)
+				}
+			}
+
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, defaultHealthCheckPath, nil))
+			if rr.Code != http.StatusOK {
+				t.Errorf("health check status = %d, want 200", rr.Code)
 			}
 		})
 	}
