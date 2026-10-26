@@ -114,12 +114,11 @@ func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryS
 }
 
 // setCORSResponseHeaders is shared with ReportAPICorsHandler so the
-// preflight and the real response agree on what's allowed.
-func setCORSResponseHeaders(w http.ResponseWriter, r *http.Request) {
-	origin := r.Header.Get("Origin")
-	allow_origin := utils.Ternary(origin != "" && utils.ValidateOrigin(origin), origin, "*")
-	w.Header().Set("Access-Control-Allow-Origin", allow_origin)
-	w.Header().Set("vary", "Origin")
+// preflight and the real response agree on what's allowed. Cross-origin
+// report uploads never carry credentials, so a wildcard origin is always
+// accepted and there's no need to echo the request's Origin back.
+func setCORSResponseHeaders(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 }
 
 func ReportAPICorsHandler(w http.ResponseWriter, r *http.Request) {
@@ -134,7 +133,7 @@ func ReportAPICorsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Methods", allow_method)
 	w.Header().Set("Access-Control-Max-Age", "60")
 	w.Header().Set("Access-Control-Allow-Headers", allow_header)
-	w.Header().Set("vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers")
+	w.Header().Set("Vary", "Access-Control-Request-Method, Access-Control-Request-Headers")
 
 	w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
 	w.Header().Set("Content-Type", "text/plain;charset=UTF-8")

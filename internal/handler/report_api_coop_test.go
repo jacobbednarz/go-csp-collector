@@ -201,7 +201,7 @@ func TestReportAPICOOPHandlerSetsCORSHeaderOnResponse(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
-	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "https://example.com" {
-		t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "https://example.com")
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "*")
 	}
 }
