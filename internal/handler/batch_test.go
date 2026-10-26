@@ -174,6 +174,47 @@ func TestBatchReportHandlerBodyReadError(t *testing.T) {
 	}
 }
 
+// The report endpoints have to be public, so a body over the limit is
+// rejected without being read into memory, and nothing in it is logged.
+func TestBatchReportHandlerBodyTooLarge(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l, buf := newTestLogger()
+	l.SetLevel(logrus.DebugLevel)
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Metrics: m, Process: passthroughProcess}
+
+	body := `[{"type":"x","value":"` + strings.Repeat("a", maxBodyBytes) + `"}]`
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest("POST", "/batch", strings.NewReader(body)))
+
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("test", "body_too_large")); got != 1 {
+		t.Errorf("reports_errors_total body_too_large = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("test", "decode_error")); got != 0 {
+		t.Errorf("reports_errors_total decode_error = %v, want 0", got)
+	}
+	if strings.Contains(buf.String(), "value=") {
+		t.Errorf("expected nothing from the oversized batch to be logged, got: %s", buf.String())
+	}
+}
+
+func TestBatchReportHandlerBodyAtLimitIsAccepted(t *testing.T) {
+	l, _ := newTestLogger()
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Process: passthroughProcess}
+
+	prefix, suffix := `[{"type":"x","value":"`, `"}]`
+	body := prefix + strings.Repeat("a", maxBodyBytes-len(prefix)-len(suffix)) + suffix
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest("POST", "/batch", strings.NewReader(body)))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for a body exactly at the limit, got %d", rr.Code)
+	}
+}
+
 type errReader struct{}
 
 func (errReader) Read(p []byte) (int, error) { return 0, errors.New("simulated read failure") }
