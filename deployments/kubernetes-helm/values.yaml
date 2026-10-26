@@ -44,8 +44,7 @@ custom:
   # Log the (full) reporting client IP address with each report.
   logClientIP: false
   # Log the truncated reporting client IP address (IPv4 /24, IPv6 /64).
-  # If both logClientIP and logTruncatedClientIP are enabled, the truncated
-  # value wins because the collector writes it last.
+  # Can't be combined with logClientIP; the collector refuses to start.
   logTruncatedClientIP: false
   # Write query parameters of the report URI as a JSON object under the
   # metadata field instead of as a single metadata string.
