@@ -46,14 +46,9 @@ func NewNELHandler(reportOnly, truncateQueryStringFragment, logClientIP, logTrun
 		Logger:               logger,
 		Metrics:              m,
 
-		Validate: func(items []NELReport) (string, error) {
-			for _, report := range items {
-				if report.Type != "network-error" {
-					continue
-				}
-				if !strings.HasPrefix(report.URL, "http") {
-					return "validation_error", fmt.Errorf("url ('%s') is invalid", report.URL)
-				}
+		Validate: func(report NELReport) (string, error) {
+			if !strings.HasPrefix(report.URL, "http") {
+				return "validation_error", fmt.Errorf("url ('%s') is invalid", report.URL)
 			}
 			return "", nil
 		},

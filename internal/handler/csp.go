@@ -73,19 +73,17 @@ func NewCSPHandler(reportOnly bool, blockedURIs, blockedDomains []string, trunca
 		Logger:               logger,
 		Metrics:              m,
 
-		Validate: func(items []CSPReport) (string, error) {
-			for _, report := range items {
-				for _, value := range blockedURIs {
-					if strings.HasPrefix(report.Body.BlockedURI, value) {
-						return "blocked_uri", fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
-					}
+		Validate: func(report CSPReport) (string, error) {
+			for _, value := range blockedURIs {
+				if strings.HasPrefix(report.Body.BlockedURI, value) {
+					return "blocked_uri", fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
 				}
-				if isBlockedByDomain(report.Body.BlockedURI, blockedDomains) {
-					return "blocked_domain", fmt.Errorf("blocked URI ('%s') is an invalid resource", report.Body.BlockedURI)
-				}
-				if !strings.HasPrefix(report.Body.DocumentURI, "http") {
-					return "validation_error", fmt.Errorf("document URI ('%s') is invalid", report.Body.DocumentURI)
-				}
+			}
+			if isBlockedByDomain(report.Body.BlockedURI, blockedDomains) {
+				return "blocked_domain", fmt.Errorf("blocked URI ('%s') is an invalid resource", report.Body.BlockedURI)
+			}
+			if !strings.HasPrefix(report.Body.DocumentURI, "http") {
+				return "validation_error", fmt.Errorf("document URI ('%s') is invalid", report.Body.DocumentURI)
 			}
 			return "", nil
 		},
