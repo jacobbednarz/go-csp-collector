@@ -203,7 +203,7 @@ func TestGenericNELHandlerMetricsSuccessAndIgnored(t *testing.T) {
 }
 
 func TestGenericNELHandlerRejectsBareObject(t *testing.T) {
-	// NEL never sets AllowSingleObject, so unlike /csp, a valid but
+	// NEL never sets SingleObject, so unlike /csp, a valid but
 	// non-array body must still be rejected, not silently accepted as a
 	// single-item batch.
 	registry := prometheus.NewRegistry()

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 
@@ -32,15 +31,12 @@ type BatchReportHandler[T ReportTyped] struct {
 	ExpectedType   string
 	MetadataObject bool
 
-	// AllowSingleObject accepts a body that's valid JSON but not a
-	// top-level array as a single-item batch instead of a decode error.
-	// Needed for CSP's legacy report-uri delivery, which predates the
-	// Reporting API and always POSTs one un-batched object. Everything
-	// else only ever sends arrays, so this defaults to false.
-	//
-	// Side effect: an endpoint using this also now accepts a genuine array
-	// of several objects, which the old single-object decoder rejected.
-	AllowSingleObject bool
+	// SingleObject decodes the body as exactly one report instead of an
+	// array. CSP's report-uri delivery predates the Reporting API and the
+	// spec only allows one un-batched object, so arrays are rejected there
+	// to match the spec. Any decode failure rejects the whole request,
+	// since there's no batch to salvage the rest of.
+	SingleObject bool
 
 	LogClientIP          bool
 	LogTruncatedClientIP bool
@@ -96,37 +92,14 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 	defer r.Body.Close()
 
-	var rawItems []json.RawMessage
-	if err := json.Unmarshal(body, &rawItems); err != nil {
-		var typeErr *json.UnmarshalTypeError
-		if h.AllowSingleObject && errors.As(err, &typeErr) {
-			// Valid JSON, just not an array - treat it as one item.
-			rawItems = []json.RawMessage{json.RawMessage(body)}
-		} else {
-			if h.Metrics != nil {
-				h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "decode_error").Inc()
-			}
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			h.Logger.Debugf("unable to decode invalid JSON payload: %s", err)
-			return
+	items, err := h.decode(body, r)
+	if err != nil {
+		if h.Metrics != nil {
+			h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "decode_error").Inc()
 		}
-	}
-
-	var items []T
-	for _, raw := range rawItems {
-		var item T
-		if err := json.Unmarshal(raw, &item); err != nil {
-			if h.Metrics != nil {
-				h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "item_decode_error").Inc()
-			}
-			h.Logger.WithFields(log.Fields{
-				"reason": "item_decode_error",
-				"body":   string(raw),
-				"path":   r.URL.Path,
-			}).Debug()
-			continue
-		}
-		items = append(items, item)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.Logger.Debugf("unable to decode invalid JSON payload: %s", err)
+		return
 	}
 
 	if h.Validate != nil {
@@ -176,6 +149,42 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// decode returns an error only when the body as a whole can't be decoded.
+// In batch mode a malformed item is counted and skipped, so one bad report
+// doesn't drop the well-formed ones sent alongside it.
+func (h *BatchReportHandler[T]) decode(body []byte, r *http.Request) ([]T, error) {
+	if h.SingleObject {
+		var item T
+		if err := json.Unmarshal(body, &item); err != nil {
+			return nil, err
+		}
+		return []T{item}, nil
+	}
+
+	var rawItems []json.RawMessage
+	if err := json.Unmarshal(body, &rawItems); err != nil {
+		return nil, err
+	}
+
+	var items []T
+	for _, raw := range rawItems {
+		var item T
+		if err := json.Unmarshal(raw, &item); err != nil {
+			if h.Metrics != nil {
+				h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "item_decode_error").Inc()
+			}
+			h.Logger.WithFields(log.Fields{
+				"reason": "item_decode_error",
+				"body":   string(raw),
+				"path":   r.URL.Path,
+			}).Debug()
+			continue
+		}
+		items = append(items, item)
+	}
+	return items, nil
 }
 
 func addClientIPField(fields log.Fields, r *http.Request, logFull, logTruncated bool, logger *log.Logger) {

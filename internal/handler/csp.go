@@ -64,9 +64,9 @@ type CSPReportBody struct {
 // NewCSPHandler builds the legacy report-uri CSP handler on BatchReportHandler.
 func NewCSPHandler(reportOnly bool, blockedURIs, blockedDomains []string, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *log.Logger, m *metrics.Metrics) http.Handler {
 	return &BatchReportHandler[CSPReport]{
-		HandlerName:       "csp",
-		AllowSingleObject: true,
-		MetadataObject:    metadataObject,
+		HandlerName:    "csp",
+		SingleObject:   true,
+		MetadataObject: metadataObject,
 
 		LogClientIP:          logClientIP,
 		LogTruncatedClientIP: logTruncatedClientIP,
