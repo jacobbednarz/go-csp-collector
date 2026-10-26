@@ -111,45 +111,17 @@ func main() {
 		blockedDomains = utils.TrimEmptyAndComments(strings.Split(string(content), "\n"))
 	}
 
-	r := mux.NewRouter()
-	r.HandleFunc(*healthCheckPath, handler.HealthcheckHandler).Methods("GET")
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
-
-	wrapWithPrometheus := func(handlerName string, route string, h http.Handler) http.Handler {
-		labels := prometheus.Labels{"handler": handlerName, "route": route}
-		return promhttp.InstrumentHandlerDuration(
-			m.RequestDuration.MustCurryWith(labels),
-			promhttp.InstrumentHandlerInFlight(m.RequestsInFlight.With(labels), h),
-		)
-	}
-
-	r.Handle("/csp/report-only", wrapWithPrometheus("csp", "/csp/report-only", handler.NewCSPHandler(
-		true, ignoredBlockedURIs, blockedDomains, *truncateQueryStringFragment, *logClientIP, *logTruncatedClientIP, *metadataObject, logger, m,
-	))).Methods("POST")
-
-	r.Handle("/csp", wrapWithPrometheus("csp", "/csp", handler.NewCSPHandler(
-		false, ignoredBlockedURIs, blockedDomains, *truncateQueryStringFragment, *logClientIP, *logTruncatedClientIP, *metadataObject, logger, m,
-	))).Methods("POST")
-
-	r.Handle("/nel/report-only", wrapWithPrometheus("nel", "/nel/report-only", handler.NewNELHandler(
-		true, *truncateQueryStringFragment, *logClientIP, *logTruncatedClientIP, *metadataObject, logger, m,
-	))).Methods("POST")
-
-	r.Handle("/nel", wrapWithPrometheus("nel", "/nel", handler.NewNELHandler(
-		false, *truncateQueryStringFragment, *logClientIP, *logTruncatedClientIP, *metadataObject, logger, m,
-	))).Methods("POST")
-
-	r.HandleFunc("/reporting-api/csp", handler.ReportAPICorsHandler).Methods("OPTIONS")
-	r.Handle("/reporting-api/csp", wrapWithPrometheus("reporting_api_csp", "/reporting-api/csp", handler.NewReportAPICSPHandler(
-		ignoredBlockedURIs, blockedDomains, *truncateQueryStringFragment, *logClientIP, *logTruncatedClientIP, *metadataObject, logger, m,
-	))).Methods("POST")
-
-	r.Handle("/", wrapWithPrometheus("csp", "/", handler.NewCSPHandler(
-		false, ignoredBlockedURIs, blockedDomains, *truncateQueryStringFragment, *logClientIP, *logTruncatedClientIP, *metadataObject, logger, m,
-	))).Methods("POST")
-
-	r.NotFoundHandler = r.NewRoute().HandlerFunc(http.NotFound).GetHandler()
+	r := newRouter(routerConfig{
+		healthCheckPath:             *healthCheckPath,
+		blockedURIs:                 ignoredBlockedURIs,
+		blockedDomains:              blockedDomains,
+		truncateQueryStringFragment: *truncateQueryStringFragment,
+		logClientIP:                 *logClientIP,
+		logTruncatedClientIP:        *logTruncatedClientIP,
+		metadataObject:              *metadataObject,
+	}, logger, m)
 
 	logger.Debugf("blocked URI list: %s", ignoredBlockedURIs)
 	logger.Debugf("blocked domain list: %s", blockedDomains)
@@ -164,4 +136,59 @@ func main() {
 	}()
 
 	logger.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), r))
+}
+
+// routerConfig holds the flag values that shape how reports are handled.
+type routerConfig struct {
+	healthCheckPath             string
+	blockedURIs                 []string
+	blockedDomains              []string
+	truncateQueryStringFragment bool
+	logClientIP                 bool
+	logTruncatedClientIP        bool
+	metadataObject              bool
+}
+
+// newRouter registers every report endpoint, kept out of main so the
+// route table itself can be tested.
+func newRouter(cfg routerConfig, logger *logrus.Logger, m *metrics.Metrics) *mux.Router {
+	r := mux.NewRouter()
+	r.HandleFunc(cfg.healthCheckPath, handler.HealthcheckHandler).Methods("GET")
+
+	wrapWithPrometheus := func(handlerName string, route string, h http.Handler) http.Handler {
+		labels := prometheus.Labels{"handler": handlerName, "route": route}
+		return promhttp.InstrumentHandlerDuration(
+			m.RequestDuration.MustCurryWith(labels),
+			promhttp.InstrumentHandlerInFlight(m.RequestsInFlight.With(labels), h),
+		)
+	}
+
+	r.Handle("/csp/report-only", wrapWithPrometheus("csp", "/csp/report-only", handler.NewCSPHandler(
+		true, cfg.blockedURIs, cfg.blockedDomains, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
+	))).Methods("POST")
+
+	r.Handle("/csp", wrapWithPrometheus("csp", "/csp", handler.NewCSPHandler(
+		false, cfg.blockedURIs, cfg.blockedDomains, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
+	))).Methods("POST")
+
+	r.Handle("/nel/report-only", wrapWithPrometheus("nel", "/nel/report-only", handler.NewNELHandler(
+		true, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
+	))).Methods("POST")
+
+	r.Handle("/nel", wrapWithPrometheus("nel", "/nel", handler.NewNELHandler(
+		false, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
+	))).Methods("POST")
+
+	r.HandleFunc("/reporting-api/csp", handler.ReportAPICorsHandler).Methods("OPTIONS")
+	r.Handle("/reporting-api/csp", wrapWithPrometheus("reporting_api_csp", "/reporting-api/csp", handler.NewReportAPICSPHandler(
+		cfg.blockedURIs, cfg.blockedDomains, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
+	))).Methods("POST")
+
+	r.Handle("/", wrapWithPrometheus("csp", "/", handler.NewCSPHandler(
+		false, cfg.blockedURIs, cfg.blockedDomains, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
+	))).Methods("POST")
+
+	r.NotFoundHandler = r.NewRoute().HandlerFunc(http.NotFound).GetHandler()
+
+	return r
 }
