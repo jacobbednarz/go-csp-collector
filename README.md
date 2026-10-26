@@ -345,6 +345,12 @@ Prometheus metrics are exposed on a dedicated endpoint:
 - Path: `/metrics`
 - Full URL: `http://127.0.0.1:9090/metrics`
 
+The Docker image listens for metrics on `0.0.0.0` instead, since `127.0.0.1`
+inside a container can only be reached from the container itself. Publish the
+port to scrape it, e.g. `docker run -p 8080:8080 -p 9090:9090
+jacobbednarz/go-csp-collector`. If you override the image's command, pass
+`--metrics-bind-addr 0.0.0.0` yourself.
+
 The collector exports:
 
 | Metric | Type | Labels | Description |

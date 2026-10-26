@@ -17,4 +17,7 @@ RUN addgroup -Sg 1000 csp_collector && \
 # A numeric user lets Kubernetes verify runAsNonRoot without a runAsUser.
 USER 1000:1000
 
-CMD ["/csp_collector"]
+# Inside a container 127.0.0.1 is only reachable from the container itself,
+# so metrics listen on every interface. They're still only exposed when the
+# port is published.
+CMD ["/csp_collector", "--metrics-bind-addr", "0.0.0.0"]
