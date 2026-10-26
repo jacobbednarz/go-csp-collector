@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
 )
 
 func TestGenericReportAPICSPHandlerDisallowedMethods(t *testing.T) {
@@ -490,5 +492,52 @@ func TestReportAPICorsHandlerPreflightDefaultsWithoutRequestHeaders(t *testing.T
 	}
 	if got := rr.Header().Get("Access-Control-Allow-Headers"); got != "*" {
 		t.Errorf("expected wildcard headers with no requested headers, got %q", got)
+	}
+}
+
+// CSP3's CSPViolationReportBody carries the first 40 characters of the
+// blocked code as `sample` when the policy has 'report-sample'. It's logged
+// under the same field name as the legacy handler's script-sample.
+func TestGenericReportAPICSPHandlerLogsSample(t *testing.T) {
+	l := logrus.New()
+	l.SetOutput(bytes.NewBuffer(nil))
+	hook := logtest.NewLocal(l)
+	h := NewReportAPICSPHandler(nil, nil, false, false, false, false, l, nil)
+
+	body := []byte(`[{"type":"csp-violation","url":"https://example.com/","body":{
+		"documentURL":"https://example.com/","referrer":"","blockedURL":"inline",
+		"effectiveDirective":"script-src-elem","originalPolicy":"script-src 'self' 'report-sample'",
+		"sourceFile":"https://example.com/","sample":"alert(1)","disposition":"enforce",
+		"statusCode":200,"lineNumber":3,"columnNumber":7}}]`)
+	req := httptest.NewRequest("POST", "/reporting-api/csp", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	want := logrus.Fields{
+		"report_only":         false,
+		"document_uri":        "https://example.com/",
+		"referrer":            "",
+		"blocked_uri":         "inline",
+		"violated_directive":  "script-src-elem",
+		"effective_directive": "script-src-elem",
+		"original_policy":     "script-src 'self' 'report-sample'",
+		"disposition":         "enforce",
+		"script_sample":       "alert(1)",
+		"status_code":         200,
+		"source_file":         "https://example.com/",
+		"line_number":         3,
+		"column_number":       7,
+		"metadata":            nil,
+		"path":                "/reporting-api/csp",
+	}
+	entries := hook.AllEntries()
+	if len(entries) != 1 {
+		t.Fatalf("got %d log entries, want 1", len(entries))
+	}
+	if !reflect.DeepEqual(entries[0].Data, want) {
+		t.Errorf("log fields = %v, want %v", entries[0].Data, want)
 	}
 }
