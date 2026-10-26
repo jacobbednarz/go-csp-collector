@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
+	"slices"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
-	log "github.com/sirupsen/logrus"
 )
 
 // maxBodyBytes caps how much of a request body is read. Chrome queues at most
@@ -22,9 +23,28 @@ type ReportTyped interface {
 	ReportType() string
 }
 
+// Fields are the key/value pairs logged for one report.
+type Fields map[string]any
+
+// attrs returns the fields sorted by key, so every report logs its fields
+// in the same order.
+func (f Fields) attrs() []slog.Attr {
+	keys := make([]string, 0, len(f))
+	for k := range f {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+
+	attrs := make([]slog.Attr, 0, len(keys))
+	for _, k := range keys {
+		attrs = append(attrs, slog.Any(k, f[k]))
+	}
+	return attrs
+}
+
 // ProcessResult is what Process returns for one successfully decoded report.
 type ProcessResult struct {
-	Fields log.Fields
+	Fields Fields
 	Mode   string // second Prometheus label, e.g. "enforced" / "report_only"
 }
 
@@ -47,7 +67,7 @@ type BatchReportHandler[T ReportTyped] struct {
 	LogClientIP          bool
 	LogTruncatedClientIP bool
 
-	Logger  *log.Logger
+	Logger  *slog.Logger
 	Metrics *metrics.Metrics
 
 	// Validate runs against each type-matched report before it's processed.
@@ -98,7 +118,7 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 			h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "body_too_large").Inc()
 		}
 		w.WriteHeader(http.StatusRequestEntityTooLarge)
-		h.Logger.Debugf("request body exceeds %d bytes", maxBodyBytes)
+		h.Logger.Debug("request body exceeds the size limit", "limit_bytes", maxBodyBytes)
 		return
 	}
 	if err != nil {
@@ -106,7 +126,7 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 			h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "decode_error").Inc()
 		}
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.Logger.Debugf("unable to read request body: %s", err)
+		h.Logger.Debug("unable to read request body", "error", err)
 		return
 	}
 	defer r.Body.Close()
@@ -117,7 +137,7 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 			h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "decode_error").Inc()
 		}
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.Logger.Debugf("unable to decode invalid JSON payload: %s", err)
+		h.Logger.Debug("unable to decode invalid JSON payload", "error", err)
 		return
 	}
 
@@ -147,7 +167,7 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 				} else if h.Metrics != nil {
 					h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, reason).Inc()
 				}
-				h.Logger.Debugf("received invalid payload: %s", err.Error())
+				h.Logger.Debug("received invalid payload", "error", err)
 				if h.SingleObject {
 					http.Error(w, err.Error(), http.StatusBadRequest)
 					return
@@ -162,7 +182,7 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 			addClientIPField(result.Fields, r, h.LogClientIP, h.LogTruncatedClientIP, h.Logger)
 		}
 
-		h.Logger.WithFields(result.Fields).Info()
+		h.Logger.LogAttrs(r.Context(), slog.LevelInfo, "", result.Fields.attrs()...)
 		if h.RecordSuccessMetric != nil {
 			h.RecordSuccessMetric(result.Mode)
 		} else if h.Metrics != nil {
@@ -197,11 +217,11 @@ func (h *BatchReportHandler[T]) decode(body []byte, r *http.Request) ([]T, error
 			if h.Metrics != nil {
 				h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "item_decode_error").Inc()
 			}
-			h.Logger.WithFields(log.Fields{
-				"reason": "item_decode_error",
-				"body":   string(raw),
-				"path":   r.URL.Path,
-			}).Debug()
+			h.Logger.Debug("skipping a report that couldn't be decoded",
+				"reason", "item_decode_error",
+				"body", string(raw),
+				"path", r.URL.Path,
+			)
 			continue
 		}
 		items = append(items, item)
@@ -211,7 +231,7 @@ func (h *BatchReportHandler[T]) decode(body []byte, r *http.Request) ([]T, error
 
 // truncateURLFields strips the query string and fragment from each named
 // field, for --truncate-query-fragment.
-func truncateURLFields(fields log.Fields, keys ...string) {
+func truncateURLFields(fields Fields, keys ...string) {
 	for _, k := range keys {
 		if v, ok := fields[k].(string); ok {
 			fields[k] = utils.TruncateQueryStringFragment(v)
@@ -219,11 +239,11 @@ func truncateURLFields(fields log.Fields, keys ...string) {
 	}
 }
 
-func addClientIPField(fields log.Fields, r *http.Request, logFull, logTruncated bool, logger *log.Logger) {
+func addClientIPField(fields Fields, r *http.Request, logFull, logTruncated bool, logger *slog.Logger) {
 	if logFull {
 		ip, err := utils.GetClientIP(r)
 		if err != nil {
-			logger.Warnf("unable to parse client ip: %s", err)
+			logger.Warn("unable to parse client ip", "error", err)
 		} else {
 			fields["client_ip"] = ip.String()
 		}
@@ -232,7 +252,7 @@ func addClientIPField(fields log.Fields, r *http.Request, logFull, logTruncated 
 	if logTruncated {
 		ip, err := utils.GetClientIP(r)
 		if err != nil {
-			logger.Warnf("unable to parse client ip: %s", err)
+			logger.Warn("unable to parse client ip", "error", err)
 		} else {
 			fields["client_ip"] = utils.TruncateClientIP(ip)
 		}

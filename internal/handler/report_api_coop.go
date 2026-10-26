@@ -2,11 +2,11 @@ package handler
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
-	log "github.com/sirupsen/logrus"
 )
 
 // COOPReport is a Cross-Origin-Opener-Policy violation delivered by the
@@ -45,7 +45,7 @@ type COOPReportBody struct {
 }
 
 // NewReportAPICOOPHandler builds the reporting-api/coop handler on BatchReportHandler.
-func NewReportAPICOOPHandler(truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *log.Logger, m *metrics.Metrics) http.Handler {
+func NewReportAPICOOPHandler(truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *slog.Logger, m *metrics.Metrics) http.Handler {
 	return &BatchReportHandler[COOPReport]{
 		HandlerName:          "reporting_api_coop",
 		ExpectedType:         "coop",
@@ -67,7 +67,7 @@ func NewReportAPICOOPHandler(truncateQueryStringFragment, logClientIP, logTrunca
 		Process: func(report COOPReport, r *http.Request, metadata interface{}) ProcessResult {
 			// COOP's report-only disposition is "reporting", unlike CSP's "report".
 			reportOnly := report.Body.Disposition == "reporting"
-			lf := log.Fields{
+			lf := Fields{
 				"report_only":           reportOnly,
 				"url":                   report.URL,
 				"type":                  report.Body.Type,

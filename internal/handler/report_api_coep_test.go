@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -10,8 +11,6 @@ import (
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/sirupsen/logrus"
-	logtest "github.com/sirupsen/logrus/hooks/test"
 )
 
 func TestReportAPICOEPHandlerLogsReport(t *testing.T) {
@@ -19,13 +18,13 @@ func TestReportAPICOEPHandlerLogsReport(t *testing.T) {
 		name     string
 		truncate bool
 		body     string
-		want     logrus.Fields
+		want     Fields
 	}{
 		{
 			name: "corp_enforced",
 			body: `[{"type":"coep","url":"https://example.com/page?q=1","age":10,"user_agent":"t","body":{
 				"type":"corp","blockedURL":"https://cdn.example/img.png?v=1","destination":"image","disposition":"enforce"}}]`,
-			want: logrus.Fields{
+			want: Fields{
 				"report_only": false,
 				"url":         "https://example.com/page?q=1",
 				"type":        "corp",
@@ -40,7 +39,7 @@ func TestReportAPICOEPHandlerLogsReport(t *testing.T) {
 			name: "navigation_report_only",
 			body: `[{"type":"coep","url":"https://example.com/","body":{
 				"type":"navigation","blockedURL":"https://frame.example/","disposition":"reporting"}}]`,
-			want: logrus.Fields{
+			want: Fields{
 				"report_only": true,
 				"url":         "https://example.com/",
 				"type":        "navigation",
@@ -56,7 +55,7 @@ func TestReportAPICOEPHandlerLogsReport(t *testing.T) {
 			truncate: true,
 			body: `[{"type":"coep","url":"https://example.com/page?q=1#f","body":{
 				"type":"corp","blockedURL":"https://cdn.example/img.png?v=1","destination":"image","disposition":"enforce"}}]`,
-			want: logrus.Fields{
+			want: Fields{
 				"report_only": false,
 				"url":         "https://example.com/page",
 				"type":        "corp",
@@ -71,8 +70,7 @@ func TestReportAPICOEPHandlerLogsReport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l, _ := newTestLogger()
-			hook := logtest.NewLocal(l)
+			l, rec := newRecordingLogger(slog.LevelInfo)
 			h := NewReportAPICOEPHandler(tt.truncate, false, false, false, l, nil)
 
 			rr := httptest.NewRecorder()
@@ -81,7 +79,7 @@ func TestReportAPICOEPHandlerLogsReport(t *testing.T) {
 			if rr.Code != http.StatusOK {
 				t.Fatalf("expected 200, got %d", rr.Code)
 			}
-			entries := hook.AllEntries()
+			entries := rec.Entries()
 			if len(entries) != 1 {
 				t.Fatalf("got %d log entries, want 1", len(entries))
 			}

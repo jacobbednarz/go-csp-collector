@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -10,15 +11,12 @@ import (
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/sirupsen/logrus"
-	logtest "github.com/sirupsen/logrus/hooks/test"
 )
 
 // The default endpoint takes every report type in one batch and logs the
 // body as raw JSON, since its shape depends on the type.
 func TestReportAPIDefaultHandlerLogsEveryType(t *testing.T) {
-	l, _ := newTestLogger()
-	hook := logtest.NewLocal(l)
+	l, rec := newRecordingLogger(slog.LevelInfo)
 	h := NewReportAPIDefaultHandler(false, false, false, false, l, nil)
 
 	body := `[
@@ -32,12 +30,12 @@ func TestReportAPIDefaultHandlerLogsEveryType(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	want := []logrus.Fields{
+	want := []Fields{
 		{"type": "deprecation", "url": "https://example.com/a?q=1", "body": `{"id":"UnloadHandler","message":"unload is deprecated","lineNumber":3}`, "metadata": nil, "path": "/reporting-api/default"},
 		{"type": "permissions-policy-violation", "url": "https://example.com/b", "body": `{"featureId":"geolocation","disposition":"enforce"}`, "metadata": nil, "path": "/reporting-api/default"},
 		{"type": "made-up", "url": "https://example.com/c", "body": "", "metadata": nil, "path": "/reporting-api/default"},
 	}
-	entries := hook.AllEntries()
+	entries := rec.Entries()
 	if len(entries) != len(want) {
 		t.Fatalf("got %d log entries, want %d", len(entries), len(want))
 	}
@@ -52,8 +50,7 @@ func TestReportAPIDefaultHandlerLogsEveryType(t *testing.T) {
 // --truncate-query-fragment the body is left out rather than logged with
 // query strings the operator asked to have removed.
 func TestReportAPIDefaultHandlerTruncationOmitsBody(t *testing.T) {
-	l, _ := newTestLogger()
-	hook := logtest.NewLocal(l)
+	l, rec := newRecordingLogger(slog.LevelInfo)
 	h := NewReportAPIDefaultHandler(true, false, false, false, l, nil)
 
 	body := `[{"type":"deprecation","url":"https://example.com/a?q=1#f","body":{"sourceFile":"https://example.com/app.js?token=secret"}}]`
@@ -63,8 +60,8 @@ func TestReportAPIDefaultHandlerTruncationOmitsBody(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	want := logrus.Fields{"type": "deprecation", "url": "https://example.com/a", "metadata": nil, "path": "/reporting-api/default"}
-	entries := hook.AllEntries()
+	want := Fields{"type": "deprecation", "url": "https://example.com/a", "metadata": nil, "path": "/reporting-api/default"}
+	entries := rec.Entries()
 	if len(entries) != 1 || !reflect.DeepEqual(entries[0].Data, want) {
 		t.Fatalf("log entries = %v, want one entry with %v", entries, want)
 	}

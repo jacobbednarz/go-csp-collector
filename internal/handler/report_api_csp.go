@@ -2,12 +2,12 @@ package handler
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
-	log "github.com/sirupsen/logrus"
 )
 
 type ReportAPIReport struct {
@@ -35,7 +35,7 @@ type ReportAPIViolation struct {
 }
 
 // NewReportAPICSPHandler builds the reporting-api/csp handler on BatchReportHandler.
-func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *log.Logger, m *metrics.Metrics) http.Handler {
+func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *slog.Logger, m *metrics.Metrics) http.Handler {
 	return &BatchReportHandler[ReportAPIReport]{
 		HandlerName:          "reporting_api_csp",
 		ExpectedType:         "csp-violation",
@@ -78,7 +78,7 @@ func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryS
 
 		Process: func(report ReportAPIReport, r *http.Request, metadata interface{}) ProcessResult {
 			reportOnly := report.Body.Disposition == "report"
-			lf := log.Fields{
+			lf := Fields{
 				"report_only":         reportOnly,
 				"document_uri":        report.Body.DocumentURL,
 				"referrer":            report.Body.Referrer,
