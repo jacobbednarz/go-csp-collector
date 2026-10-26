@@ -1,5 +1,7 @@
 {{- if .Values.ingress.enabled }}
-1. The CSP violation collector is available by setting your report-uri to:
+1. The collector is available at the URL below. Point your report-uri,
+   report-to or Reporting-Endpoints headers at its routes, which are listed in
+   https://github.com/jacobbednarz/go-csp-collector#reports
 {{- range .Values.ingress.hosts }}
   http{{ if $.Values.ingress.tls }}s{{ end }}://{{ . }}{{ $.Values.ingress.path }}
 {{- end }}
