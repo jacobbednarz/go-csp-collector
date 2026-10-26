@@ -538,35 +538,47 @@ func TestGenericCSPHandlerTruncatesQueryStringFragment(t *testing.T) {
 	}
 }
 
-// TestGenericCSPHandlerAcceptsArrayOfReports documents a deliberate behavior
-// change from the original single-object-only CSPViolationReportHandler:
-// AllowSingleObject only changes what happens when the body ISN'T an array,
-// it doesn't stop the handler from accepting one. A genuine JSON array of
-// several csp-report objects now succeeds and processes each entry,
-// something the old decoder (`Decode(&report)` into a single struct) would
-// have rejected outright as a decode error.
-func TestGenericCSPHandlerAcceptsArrayOfReports(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	m := metrics.New(registry)
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
-
-	h := newTestCSPHandler(nil, nil, l, m)
-
-	payload := []byte(`[
-		{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/one.js"}},
-		{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/two.js"}}
-	]`)
-
-	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(payload))
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+// The CSP spec has report-uri deliver exactly one un-batched object, so
+// anything else must fail the whole request the same way the original
+// single-struct decoder did, never be partially accepted.
+func TestCSPHandlerRejectsBodiesThatAreNotASingleReport(t *testing.T) {
+	report := `{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/one.js"}}`
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantReason string
+	}{
+		{name: "array_of_reports", body: "[" + report + "," + report + "]", wantStatus: http.StatusUnprocessableEntity, wantReason: "decode_error"},
+		{name: "empty_array", body: "[]", wantStatus: http.StatusUnprocessableEntity, wantReason: "decode_error"},
+		{name: "number", body: "123", wantStatus: http.StatusUnprocessableEntity, wantReason: "decode_error"},
+		{name: "string", body: `"report"`, wantStatus: http.StatusUnprocessableEntity, wantReason: "decode_error"},
+		{name: "mistyped_field", body: `{"csp-report":{"document-uri":"https://example.com","line-number":"abc"}}`, wantStatus: http.StatusUnprocessableEntity, wantReason: "decode_error"},
+		{name: "null", body: "null", wantStatus: http.StatusBadRequest, wantReason: "validation_error"},
 	}
-	if got := testutil.ToFloat64(m.Reports.WithLabelValues("csp", "enforced")); got != 2 {
-		t.Fatalf("reports_total = %v, want 2", got)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry := prometheus.NewRegistry()
+			m := metrics.New(registry)
+			l := logrus.New()
+			l.SetOutput(bytes.NewBuffer(nil))
+			h := newTestCSPHandler(nil, nil, l, m)
+
+			req := httptest.NewRequest("POST", "/csp", strings.NewReader(tt.body))
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+
+			if rr.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d: %s", tt.wantStatus, rr.Code, rr.Body.String())
+			}
+			if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("csp", tt.wantReason)); got != 1 {
+				t.Errorf("reports_errors_total %s = %v, want 1", tt.wantReason, got)
+			}
+			if got := testutil.CollectAndCount(m.Reports); got != 0 {
+				t.Errorf("reports_total has %d series, want 0", got)
+			}
+		})
 	}
 }
 

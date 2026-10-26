@@ -32,7 +32,7 @@ func TestGenericReportAPICSPHandlerDisallowedMethods(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerRejectsBareObject(t *testing.T) {
-	// reporting-api/csp never sets AllowSingleObject, so unlike /csp, a
+	// reporting-api/csp never sets SingleObject, so unlike /csp, a
 	// valid but non-array body must still be rejected.
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)

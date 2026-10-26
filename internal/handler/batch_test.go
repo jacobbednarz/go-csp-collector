@@ -96,16 +96,16 @@ func TestBatchReportHandlerSingleObjectRejectedByDefault(t *testing.T) {
 	h.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422 for a bare object without AllowSingleObject, got %d", rr.Code)
+		t.Fatalf("expected 422 for a bare object without SingleObject, got %d", rr.Code)
 	}
 	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("test", "decode_error")); got != 1 {
 		t.Fatalf("reports_errors_total decode_error = %v, want 1", got)
 	}
 }
 
-func TestBatchReportHandlerSingleObjectAcceptedWhenAllowed(t *testing.T) {
+func TestBatchReportHandlerSingleObjectAccepted(t *testing.T) {
 	l, buf := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", AllowSingleObject: true, Logger: l, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", SingleObject: true, Logger: l, Process: passthroughProcess}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`{"type":"x","value":"one"}`))
 	rr := httptest.NewRecorder()
@@ -119,16 +119,40 @@ func TestBatchReportHandlerSingleObjectAcceptedWhenAllowed(t *testing.T) {
 	}
 }
 
-func TestBatchReportHandlerMalformedJSONAlwaysRejected(t *testing.T) {
-	l, _ := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", AllowSingleObject: true, Logger: l, Process: passthroughProcess}
+func TestBatchReportHandlerSingleObjectRejectsOtherBodies(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "malformed_json", body: "not json at all"},
+		{name: "array", body: `[{"type":"x","value":"one"}]`},
+		{name: "mistyped_field", body: `{"type":"x","value":123}`},
+	}
 
-	req := httptest.NewRequest("POST", "/batch", strings.NewReader("not json at all"))
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry := prometheus.NewRegistry()
+			m := metrics.New(registry)
+			l, buf := newTestLogger()
+			h := &BatchReportHandler[testReport]{HandlerName: "test", SingleObject: true, Logger: l, Metrics: m, Process: passthroughProcess}
 
-	if rr.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422 for genuinely malformed JSON even with AllowSingleObject, got %d", rr.Code)
+			req := httptest.NewRequest("POST", "/batch", strings.NewReader(tt.body))
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("expected 422, got %d", rr.Code)
+			}
+			if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("test", "decode_error")); got != 1 {
+				t.Errorf("reports_errors_total decode_error = %v, want 1", got)
+			}
+			if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("test", "item_decode_error")); got != 0 {
+				t.Errorf("reports_errors_total item_decode_error = %v, want 0", got)
+			}
+			if buf.Len() != 0 {
+				t.Errorf("expected no log output at info level, got: %s", buf.String())
+			}
+		})
 	}
 }
 
