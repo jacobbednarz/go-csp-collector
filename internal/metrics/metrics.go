@@ -25,7 +25,7 @@ func New(registry *prometheus.Registry) *Metrics {
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "reports_total",
-				Help:      "Total number of successfully processed reports, except NEL reports, which have their own counter.",
+				Help:      "Total number of successfully processed reports.",
 			},
 			[]string{"handler", "mode"},
 		),
@@ -33,7 +33,7 @@ func New(registry *prometheus.Registry) *Metrics {
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Name:      "nel_reports_total",
-				Help:      "Total number of successfully processed NEL reports.",
+				Help:      "Deprecated: use csp_collector_reports_total{handler=\"nel\"}. Total number of successfully processed NEL reports.",
 			},
 			[]string{"mode"},
 		),

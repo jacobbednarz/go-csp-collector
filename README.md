@@ -357,7 +357,7 @@ The collector exports:
 | Metric | Type | Labels | Description |
 | ------ | ---- | ------ | ----------- |
 | `csp_collector_reports_total` | Counter | `handler`, `mode` | Successfully processed CSP or Reporting API reports. `mode` is `enforced` or `report_only`, except on `/reporting-api/default`, where it's the report type for known Reporting API types and `reporting-api-default` for anything else |
-| `csp_collector_nel_reports_total` | Counter | `mode` | Successfully processed NEL reports |
+| `csp_collector_nel_reports_total` | Counter | `mode` | **Deprecated**, use `csp_collector_reports_total{handler="nel"}`, which counts the same reports. It will be removed in a future release |
 | `csp_collector_reports_filtered_total` | Counter | `handler`, `reason` | Reports dropped by URI/domain filters |
 | `csp_collector_reports_ignored_total` | Counter | `handler`, `reason` | Reports intentionally ignored (for example unsupported NEL types) |
 | `csp_collector_reports_errors_total` | Counter | `handler`, `type` | Rejected reports: decode or validation failures, or a request body over the 5 MiB limit (`body_too_large`) |
