@@ -120,6 +120,10 @@ to their enforced counterparts, but with `report_only=true` in the log output.
 This lets you distinguish enforced violations from report-only ones in your log
 aggregation tool without needing separate collector instances.
 
+For CSP, a `disposition` of `enforce` or `report` in the report body takes
+precedence over the endpoint, since the browser knows which header the policy
+came from. The endpoint is only used when a browser omits `disposition`.
+
 ### Metrics
 
 Prometheus metrics are exposed on a dedicated endpoint:
