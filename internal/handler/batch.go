@@ -85,7 +85,8 @@ type BatchReportHandler[T ReportTyped] struct {
 
 	// RecordSuccessMetric overrides the default
 	// Reports.WithLabelValues(HandlerName, mode) increment, for handlers
-	// with their own dedicated metric (e.g. NEL's NELReports).
+	// that also record a metric of their own (e.g. NEL's deprecated
+	// NELReports).
 	RecordSuccessMetric func(mode string)
 
 	// RecordValidationErrorMetric overrides the default
