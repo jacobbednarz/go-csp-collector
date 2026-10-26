@@ -87,6 +87,11 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Both write the same client_ip field, so one would silently win.
+	if *logClientIP && *logTruncatedClientIP {
+		logrus.Fatal("--log-client-ip and --log-truncated-client-ip can't be combined, pick one")
+	}
+
 	if *debugFlag {
 		logger.SetLevel(logrus.DebugLevel)
 	}
