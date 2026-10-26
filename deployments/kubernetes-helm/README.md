@@ -53,6 +53,8 @@ ingress:
 | `service.metrics.port`      | Service port for Prometheus metrics       | `9090`                                                  |
 | `image.repository`          | Container image repository                | `jacobbednarz/go-csp-collector`                        |
 | `image.tag`                 | Container image tag                       | Chart app version                                      |
+| `image.pullPolicy`          | Container image pull policy               | `IfNotPresent`                                          |
+| `containerSecurityContext`  | Container security context. Runs as uid 1000 with no capabilities and a read-only root filesystem | See `values.yaml` |
 | `service.annotations`       | Service annotations                       | `{}`                                                    |
 | `metrics.enabled`           | Enables the dedicated metrics listener    | `true`                                                  |
 | `metrics.bindAddress`       | Bind address for the metrics listener     | `0.0.0.0`                                               |

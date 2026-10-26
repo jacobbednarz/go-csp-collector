@@ -7,7 +7,7 @@ replicaCount: 1
 image:
   repository: jacobbednarz/go-csp-collector
   tag: ""
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
 
 imagePullSecrets: []
 
@@ -111,14 +111,20 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
-containerSecurityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-# runAsNonRoot: true
-# runAsUser: 1000
-
+# The collector only writes to stdout and binds unprivileged ports, so it
+# runs with no capabilities and a read-only root filesystem. runAsUser is
+# set for image tags from before the image switched to a numeric USER.
+containerSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext: {}
   # fsGroup: 2000
