@@ -6,10 +6,7 @@ Type=simple
 DynamicUser=yes
 Restart=always
 RestartSec=5
-ExecStart=/usr/local/bin/go-csp-collector -filterlist /etc/csp-filterlist.txt -port 8081
-
-Restart=always
-RestartSec=5
+ExecStart=/usr/local/bin/go-csp-collector -filter-file /etc/csp-filterlist.txt -port 8081
 
 PrivateDevices=true
 PrivateTmp=yes
