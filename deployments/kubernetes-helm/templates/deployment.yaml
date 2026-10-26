@@ -47,8 +47,9 @@ spec:
           volumeMounts:
           - name: config-volume
             mountPath: /configs
-          args:
+          command:
             - "/csp_collector"
+          args:
           {{- if .Values.custom.jsonOutput }}
             - "--output-format"
             - "json"
@@ -65,6 +66,10 @@ spec:
             - {{ .Values.metrics.bindAddress | quote }}
             - "--metrics-port"
             - {{ .Values.metrics.port | quote }}
+          {{- else }}
+          {{- /* The image's default args bind metrics to every interface. */}}
+            - "--metrics-bind-addr"
+            - "127.0.0.1"
           {{- end }}
           {{- if .Values.custom.filterDomainsFile }}
             - "--filter-domains-file"

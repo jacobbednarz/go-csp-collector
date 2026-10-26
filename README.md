@@ -38,7 +38,9 @@ Reports show up on the collector's stdout as they arrive.
 
 ## Installation
 
-- **Docker**: `jacobbednarz/go-csp-collector` on Docker Hub.
+- **Docker**: `jacobbednarz/go-csp-collector` on Docker Hub. Flags go
+  straight after the image name, e.g. `docker run -p 8080:8080
+  jacobbednarz/go-csp-collector --output-format json`.
 - **Binaries**: download one from the [release page][2].
 - **From source**: `go install github.com/jacobbednarz/go-csp-collector@latest`,
   which installs a binary named `go-csp-collector`.
@@ -349,8 +351,9 @@ Prometheus metrics are exposed on a dedicated endpoint:
 The Docker image listens for metrics on `0.0.0.0` instead, since `127.0.0.1`
 inside a container can only be reached from the container itself. Publish the
 port to scrape it, e.g. `docker run -p 8080:8080 -p 9090:9090
-jacobbednarz/go-csp-collector`. If you override the image's command, pass
-`--metrics-bind-addr 0.0.0.0` yourself.
+jacobbednarz/go-csp-collector`. That default is the image's only argument,
+so if you pass any flags of your own, include `--metrics-bind-addr 0.0.0.0`
+with them.
 
 The collector exports:
 
