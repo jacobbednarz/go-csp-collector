@@ -1,50 +1,124 @@
-This is a content security policy (CSP) violation and network error logging
-(NEL) collector written in Golang.
+# go-csp-collector
 
-It has been designed to listen on port 8080 and accept POST payloads
-containing the violation report. It captures the report and will write
-it to STDOUT via Go's logger.
+A self-hosted collector for the security reports browsers send: Content
+Security Policy (CSP) violations, Network Error Logging (NEL), and
+Cross-Origin-Opener-Policy (COOP), Cross-Origin-Embedder-Policy (COEP) and
+other [Reporting API](https://www.w3.org/TR/reporting-1/) reports. Point your
+`report-uri`, `report-to` or `Reporting-Endpoints` headers at it, and each
+report is written to stdout as a log line for your log aggregation tool to
+pick up. Prometheus metrics are exported alongside.
 
-A neat little feature of this tool is that it automatically ignores
-unactionable reports. Check out the [default list][1] if you're interested.
+It also drops unactionable CSP reports, such as those caused by browser
+extensions, out of the box. The [default list][1] shows what's ignored.
 
-### Installation
+| Report               | Header that sends it                                         | Route                                              |
+| -------------------- | ------------------------------------------------------------ | -------------------------------------------------- |
+| [CSP](#csp)          | `Content-Security-Policy` (and `-Report-Only`)               | `/csp`, `/csp/report-only` or `/reporting-api/csp` |
+| [NEL](#nel)          | `NEL`                                                        | `/nel` or `/nel/report-only`                       |
+| [COOP](#coop)        | `Cross-Origin-Opener-Policy` (and `-Report-Only`)            | `/reporting-api/coop`                              |
+| [COEP](#coep)        | `Cross-Origin-Embedder-Policy` (and `-Report-Only`)          | `/reporting-api/coep`                              |
+| [Anything else](#default-reporting-api-endpoint) | `Reporting-Endpoints` with a `default` endpoint | `/reporting-api/default`                  |
+
+## Quick start
+
+Run the collector from Docker Hub:
 
 ```sh
-$ go get github.com/jacobbednarz/go-csp-collector
+docker run -p 8080:8080 jacobbednarz/go-csp-collector
 ```
 
-Alternatively, you can download the binaries from the [release page][2].
+Then point a policy at it from the site you want reports for:
 
-### Running
+```http
+Reporting-Endpoints: csp-endpoint="https://collector.example.com/reporting-api/csp"
+Content-Security-Policy: default-src 'self'; report-uri https://collector.example.com/csp; report-to csp-endpoint
+```
+
+Reports show up on the collector's stdout as they arrive.
+
+## Installation
+
+- **Docker**: `jacobbednarz/go-csp-collector` on Docker Hub.
+- **Binaries**: download one from the [release page][2].
+- **From source**: `go install github.com/jacobbednarz/go-csp-collector@latest`,
+  which installs a binary named `go-csp-collector`.
+- **Kubernetes**: use the [Helm chart][3].
+- **systemd**: use the [example unit file][4].
+
+To build it yourself:
 
 ```sh
-$ go build -o csp_collector main.go
-$ ./csp_collector
+go build -o csp_collector main.go
+./csp_collector
 ```
 
-### Endpoints
+The collector listens on port 8080 for reports and serves metrics on
+`127.0.0.1:9090`.
 
-#### CSP
+## Reports
 
-- `POST /`: accepts a CSP violation report (recommended to use `/csp` for future proofing though).
-- `POST /csp`: accepts a CSP violation report.
-- `POST /csp/report-only`: same as `/csp` but appends a `report_only=true` attribute to the log line. Helpful if you have enforced and report-only violations and wish to separate them.
-- `OPTIONS /reporting-api/csp`: CORS preflight handler for the Reporting API.
-- `POST /reporting-api/csp`: Implementation of the browser Reporting API ([w3c](https://www.w3.org/TR/reporting-1/) / [MDN](https://developer.mozilla.org/en-US/docs/Web/API/Reporting_API)) for CSP violations.
+Every logged report includes `metadata` (see [Request
+metadata](#request-metadata)) and `path`, the collector route that received
+it. The Reporting API routes (`/reporting-api/*` and `/nel*`) also answer CORS
+preflight `OPTIONS` requests, which browsers send when the collector is on a
+different origin to the reporting site.
 
-#### NEL (Network Error Logging)
+### CSP
 
-> [!IMPORTANT]  
+The collector accepts both ways browsers deliver CSP violations:
+
+- `POST /csp` and `POST /csp/report-only` take the single JSON object sent by
+  the `report-uri` directive. `POST /` does the same as `/csp`, but `/csp` is
+  recommended.
+- `POST /reporting-api/csp` takes the JSON array sent by the `report-to`
+  directive through the [Reporting API](https://www.w3.org/TR/reporting-1/)
+  ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Reporting_API)).
+  Entries with any other `type` are skipped.
+
+Set both directives so that browsers which only support one of them still
+report. Browsers that support `report-to` ignore `report-uri`.
+
+```http
+Reporting-Endpoints: csp-endpoint="https://collector.example.com/reporting-api/csp"
+Content-Security-Policy: default-src 'self'; report-uri https://collector.example.com/csp; report-to csp-endpoint
+```
+
+Each logged CSP report includes the following fields, whichever route it came
+in on:
+
+| Field                 | Description                                                                                         |
+| --------------------- | --------------------------------------------------------------------------------------------------- |
+| `report_only`         | `true` for a report-only policy (see [Report-only policies](#report-only-policies))                  |
+| `document_uri`        | The URL of the document the violation happened in                                                  |
+| `referrer`            | The document's referrer                                                                             |
+| `blocked_uri`         | The URL of the blocked resource, or a keyword such as `inline` or `eval`                            |
+| `violated_directive`  | The directive that was violated. On `/reporting-api/csp` this is the same as `effective_directive` |
+| `effective_directive` | The directive whose enforcement caused the violation, e.g. `script-src-elem`                        |
+| `original_policy`     | The full policy the violation was reported against                                                 |
+| `disposition`         | `enforce` or `report`                                                                               |
+| `script_sample`       | The first 40 characters of the inline script, event handler or style, if the policy asks for samples |
+| `status_code`         | The HTTP status code of the document                                                                |
+| `source_file`         | The script that caused the violation                                                                |
+| `line_number`         | Line of the violation in `source_file`                                                              |
+| `column_number`       | Column of the violation in `source_file`                                                            |
+
+The [filter lists](#filtering-csp-reports) apply to every CSP route.
+
+### NEL
+
+> [!IMPORTANT]
 > Network error logging is still experimental in most browsers. This functionality is best effort and may need to adjust as the specification does.
 
-- `OPTIONS /nel`, `OPTIONS /nel/report-only`: CORS preflight handlers, needed when the collector is on a different origin to the reporting site.
 - `POST /nel`: accepts NEL reports for an enforced NEL policy.
-- `POST /nel/report-only`: same as `/nel` but appends a `report_only=true` attribute to the log line. Useful when testing a NEL policy before enforcing it.
+- `POST /nel/report-only`: same as `/nel`, but logs `report_only=true`. Useful
+  when testing a NEL policy before enforcing it.
 
-NEL reports are delivered by the browser via the [Reporting API](https://www.w3.org/TR/reporting-1/) as a JSON array. Each entry with `"type": "network-error"` is logged; other types in a mixed batch are silently skipped.
+NEL reports are delivered by the browser via the Reporting API as a JSON
+array. Each entry with `"type": "network-error"` is logged; other types in a
+mixed batch are skipped.
 
-To enable NEL reporting, send the `NEL` and `Report-To` (or `Reporting-Endpoints`) headers from your server:
+To enable NEL reporting, send the `NEL` and `Report-To` (or
+`Reporting-Endpoints`) headers from your server:
 
 ```http
 Reporting-Endpoints: nel-endpoint="https://collector.example.com/nel"
@@ -53,26 +127,25 @@ NEL: {"report_to": "nel-endpoint", "max_age": 31536000}
 
 Each logged NEL report includes the following fields:
 
-| Field               | Description                                              |
-| ------------------- | -------------------------------------------------------- |
-| `report_only`       | `true` when received on the `/nel/report-only` endpoint  |
-| `url`               | The URL of the request that failed                       |
-| `referrer`          | The referrer at the time of the request                  |
-| `type`              | Error type (e.g. `tcp.refused`, `dns.unreachable`, `ok`) |
+| Field               | Description                                                              |
+| ------------------- | ------------------------------------------------------------------------ |
+| `report_only`       | `true` when received on the `/nel/report-only` endpoint                  |
+| `url`               | The URL of the request that failed                                       |
+| `referrer`          | The referrer at the time of the request                                  |
+| `type`              | Error type (e.g. `tcp.refused`, `dns.unreachable`, `ok`)                 |
 | `phase`             | Phase of the request: `dns`, `connection`, `application`, or `abandoned` |
-| `protocol`          | Network protocol (e.g. `h2`, `http/1.1`)                |
-| `method`            | HTTP method (e.g. `GET`, `POST`)                         |
-| `status_code`       | HTTP status code (0 if the connection never completed)   |
-| `elapsed_time`      | Duration of the request in milliseconds                  |
-| `server_ip`         | IP address of the server that handled the request        |
-| `sampling_fraction` | Fraction of matching requests that were reported         |
-| `metadata`          | Value of the `metadata` query parameter (if present)     |
-| `path`              | Path of the collector endpoint that received the report  |
+| `protocol`          | Network protocol (e.g. `h2`, `http/1.1`)                                 |
+| `method`            | HTTP method (e.g. `GET`, `POST`)                                         |
+| `status_code`       | HTTP status code (0 if the connection never completed)                   |
+| `elapsed_time`      | Duration of the request in milliseconds                                  |
+| `server_ip`         | IP address of the server that handled the request                        |
+| `sampling_fraction` | Fraction of matching requests that were reported                         |
 
-#### COOP (Cross-Origin-Opener-Policy)
+### COOP
 
-- `OPTIONS /reporting-api/coop`: CORS preflight handler for the Reporting API.
-- `POST /reporting-api/coop`: accepts [COOP violation reports](https://html.spec.whatwg.org/multipage/browsers.html#coop-reporting) delivered by the Reporting API. Entries with any other `type` are skipped.
+`POST /reporting-api/coop` accepts [Cross-Origin-Opener-Policy violation
+reports](https://html.spec.whatwg.org/multipage/browsers.html#coop-reporting)
+delivered by the Reporting API. Entries with any other `type` are skipped.
 
 COOP reports are sent by Chrome and Safari. Point the `report-to` parameter of
 `Cross-Origin-Opener-Policy` (or `Cross-Origin-Opener-Policy-Report-Only`) at
@@ -83,8 +156,7 @@ Reporting-Endpoints: coop-endpoint="https://collector.example.com/reporting-api/
 Cross-Origin-Opener-Policy: same-origin; report-to="coop-endpoint"
 ```
 
-There's no separate report-only route, since each report's `disposition` says
-whether it came from the report-only header. Each logged COOP report includes:
+Each logged COOP report includes:
 
 | Field                   | Description                                                                                   |
 | ----------------------- | --------------------------------------------------------------------------------------------- |
@@ -104,8 +176,6 @@ whether it came from the report-only header. Each logged COOP report includes:
 | `source_file`           | Access reports: the script that made the access                                               |
 | `line_number`           | Access reports: line of the access in `source_file`                                           |
 | `column_number`         | Access reports: column of the access in `source_file`                                         |
-| `metadata`              | Value of the `metadata` query parameter (if present)                                          |
-| `path`                  | Path of the collector endpoint that received the report                                       |
 
 Access reports have one of six types, naming which side made the access:
 `access-from-coop-page-to-openee`, `access-from-coop-page-to-opener`,
@@ -113,10 +183,11 @@ Access reports have one of six types, naming which side made the access:
 `access-to-coop-page-from-opener` and `access-to-coop-page-from-other`.
 Fields that don't apply to a report's `type` are logged empty.
 
-#### COEP (Cross-Origin-Embedder-Policy)
+### COEP
 
-- `OPTIONS /reporting-api/coep`: CORS preflight handler for the Reporting API.
-- `POST /reporting-api/coep`: accepts [COEP violation reports](https://developer.mozilla.org/en-US/docs/Web/API/COEPViolationReport) delivered by the Reporting API. Entries with any other `type` are skipped.
+`POST /reporting-api/coep` accepts [Cross-Origin-Embedder-Policy violation
+reports](https://developer.mozilla.org/en-US/docs/Web/API/COEPViolationReport)
+delivered by the Reporting API. Entries with any other `type` are skipped.
 
 COEP reports are sent by Chrome and Safari. Like COOP, point the `report-to`
 parameter of `Cross-Origin-Embedder-Policy` (or
@@ -129,21 +200,19 @@ Cross-Origin-Embedder-Policy: require-corp; report-to="coep-endpoint"
 
 Each logged COEP report includes:
 
-| Field         | Description                                                              |
-| ------------- | ------------------------------------------------------------------------ |
-| `report_only` | `true` when `disposition` is `reporting`                                 |
-| `url`         | The URL of the document that generated the report                        |
-| `type`        | `corp`, `navigation` or `worker initialization`                          |
-| `blocked_uri` | The URL of the blocked resource                                          |
-| `destination` | `corp` reports: the blocked resource's destination, e.g. `image`         |
-| `disposition` | `enforce` or `reporting`                                                 |
-| `metadata`    | Value of the `metadata` query parameter (if present)                     |
-| `path`        | Path of the collector endpoint that received the report                  |
+| Field         | Description                                                      |
+| ------------- | ---------------------------------------------------------------- |
+| `report_only` | `true` when `disposition` is `reporting`                         |
+| `url`         | The URL of the document that generated the report                |
+| `type`        | `corp`, `navigation` or `worker initialization`                  |
+| `blocked_uri` | The URL of the blocked resource                                  |
+| `destination` | `corp` reports: the blocked resource's destination, e.g. `image` |
+| `disposition` | `enforce` or `reporting`                                         |
 
-#### Default Reporting API endpoint
+### Default Reporting API endpoint
 
-- `OPTIONS /reporting-api/default`: CORS preflight handler for the Reporting API.
-- `POST /reporting-api/default`: accepts reports of any type delivered by the Reporting API.
+`POST /reporting-api/default` accepts reports of any type delivered by the
+Reporting API.
 
 Browsers send some report types to the endpoint named `default` without any
 extra header, such as `deprecation` and `intervention` reports. Others, such as
@@ -157,22 +226,44 @@ Reporting-Endpoints: default="https://collector.example.com/reporting-api/defaul
 The body's shape depends on the report type, so it's logged as raw JSON rather
 than split into fields. Each logged report includes:
 
-| Field      | Description                                                                                |
-| ---------- | ------------------------------------------------------------------------------------------ |
-| `type`     | The report type, e.g. `deprecation`                                                        |
-| `url`      | The URL of the document that generated the report                                          |
-| `body`     | The report body as raw JSON. Left out when `truncate-query-fragment` is set, since URLs inside it can't be reliably stripped |
-| `metadata` | Value of the `metadata` query parameter (if present)                                       |
-| `path`     | Path of the collector endpoint that received the report                                    |
+| Field  | Description                                                                                                                       |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `type` | The report type, e.g. `deprecation`                                                                                               |
+| `url`  | The URL of the document that generated the report                                                                                 |
+| `body` | The report body as raw JSON. Left out when `--truncate-query-fragment` is set, since URLs inside it can't be reliably stripped |
 
-#### Building for Docker
+### Report-only policies
 
-You will either need to build within a docker container for the purpose, or use `CGO_ENABLED=0` flag
-to make the build compatible with alpine linux in a docker container.
+Every report says whether it came from an enforced or a report-only policy, as
+the `report_only` field and the `mode` label on the metrics. That lets you
+keep both in one collector and tell them apart in your log aggregation tool.
 
-```sh
-$ CGO_ENABLED=0 go build -o csp_collector main.go
-```
+- **CSP** uses the report's `disposition` (`enforce` or `report`), since the
+  browser knows which header the policy came from. `/csp/report-only` is only
+  used as a fallback when a browser leaves `disposition` out.
+- **NEL** has no disposition, so it's taken from the route: reports sent to
+  `/nel/report-only` are report-only.
+- **COOP** and **COEP** use the report's `disposition` (`enforce` or
+  `reporting`), so they have no report-only routes.
+
+## Configuration
+
+| Flag                        | Description                                                                                                                                         |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--version`                 | Shows the version string before exiting                                                                                                             |
+| `--debug`                   | Runs in debug mode producing more verbose output                                                                                                    |
+| `--port`                    | Port to listen on for reports, default `8080`                                                                                                       |
+| `--metrics-port`            | Port for the Prometheus metrics endpoint, default `9090`                                                                                            |
+| `--metrics-bind-addr`       | Bind address for the Prometheus metrics endpoint, default `127.0.0.1`                                                                               |
+| `--health-check-path`       | Path for health checkers to use, default `/_healthcheck`                                                                                            |
+| `--endpoints`               | Comma separated list of endpoint groups to serve, default all of them. See [Disabling endpoints](#disabling-endpoints)                              |
+| `--output-format`           | `text` (default) or `json`. See [Output formats](#output-formats)                                                                                   |
+| `--filter-file`             | Replaces the built-in CSP blocked URI prefix list with the one in this file. See [Filtering CSP reports](#filtering-csp-reports)                     |
+| `--filter-domains-file`     | Drops CSP reports whose blocked URI is on a domain in this file. See [Filtering CSP reports](#filtering-csp-reports)                                |
+| `--truncate-query-fragment` | Removes query strings and fragments from the URLs in each report before logging, to reduce the chance of logging sensitive data                     |
+| `--log-client-ip`           | Logs the IP delivering the report, or the `X-Forwarded-For` header if present                                                                       |
+| `--log-truncated-client-ip` | Logs the IP delivering the report truncated to a /24 for IPv4 or a /64 for IPv6, or the `X-Forwarded-For` header if present. Conflicts with `--log-client-ip` |
+| `--query-params-metadata`   | Logs every query parameter of the report URL as a map in `metadata`. See [Request metadata](#request-metadata)                                      |
 
 ### Disabling endpoints
 
@@ -200,54 +291,53 @@ The collector refuses to start if the list names an unknown group or is empty,
 so a typo can't quietly switch an endpoint off. The health check is always
 served.
 
-### Command Line Options
+### Filtering CSP reports
 
-| Flag                    | Description                                                                                                                                                                                       |
-| ----------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| version                 | Shows the version string before exiting                                                                                                                                                           |
-| debug                   | Runs in debug mode producing more verbose output                                                                                                                                                  |
-| port                    | Port to run on, default 8080                                                                                                                                                                      |
-| metrics-port            | Port for the Prometheus metrics endpoint, default 9090                                                                                                                                            |
-| metrics-bind-addr       | Bind address for the Prometheus metrics endpoint, default 127.0.0.1                                                                                                                               |
-| filter-file             | Reads the blocked URI filter list from the specified file. Each line is matched as a prefix against the blocked URI. Note one filter per line.                                                    |
-| filter-domains-file     | Reads a domain block list from the specified file. Each line is a bare domain (e.g. `kaspersky-labs.com`). A report is dropped when the blocked URI's hostname exactly matches the domain or is any subdomain of it (e.g. `gc.kis.v2.scr.kaspersky-labs.com`). Matching uses exact suffix comparison — no fuzzy or regex logic. Note one domain per line. **Performance note:** each check requires a `url.Parse` call to extract the hostname, which costs roughly 20–35× more than the prefix filter (~180 ns/op vs ~5–8 ns/op). For high-throughput deployments, prefer `filter-file` for simple prefix matches and only use `filter-domains-file` where subdomain wildcard matching is genuinely needed. |
-| health-check-path       | Sets path for health checkers to use, default \/\_healthcheck                                                                                                                                     |
-| log-client-ip           | Include a field in the log with the IP delivering the report, or the value of the `X-Forwarded-For` header, if present.                                                                           |
-| log-truncated-client-ip | Include a field in the log with the truncated IP (to /24 for IPv4, /64 for IPv6) delivering the report, or the value of the `X-Forwarded-For` header, if present. Conflicts with `log-client-ip`. |
-| truncate-query-fragment | Remove all query strings and fragments (if set) from all URLs transmitted by the client                                                                                                           |
-| query-params-metadata   | Log all query parameters of the report URL as a map in the `metadata` field                                                                                                                       |
-| endpoints               | Comma separated list of endpoint groups to serve. Defaults to all of them. See [Disabling endpoints](#disabling-endpoints) for the groups.                                                          |
+Browser extensions inject scripts and styles that trip CSP, filling the logs
+with reports you can't act on. The collector drops CSP reports whose blocked
+URI starts with a prefix on its [built-in list][1]. To use your own list
+instead, pass `--filter-file` with one prefix per line. It replaces the
+built-in list rather than adding to it, so copy `sample.filterlist.txt` as a
+starting point.
 
-See the `sample.filterlist.txt` file as an example of the URI prefix filter list, and
-`sample.domainlist.txt` as an example of the domain filter list.
+`--filter-domains-file` drops reports whose blocked URI is on a listed domain
+or any subdomain of it. Each line is a bare domain, so `kaspersky-labs.com`
+also matches `gc.kis.v2.scr.kaspersky-labs.com`. See `sample.domainlist.txt`
+for an example. Each check parses the blocked URI to get its hostname, which
+costs roughly 20–35 times more than a prefix check (~180 ns/op against ~5–8
+ns/op). For high-throughput deployments, prefer `--filter-file` and only use
+domains where you need subdomain matching.
+
+Both lists apply only to the CSP routes. Filtered reports are counted in
+`csp_collector_reports_filtered_total`.
 
 ### Request metadata
 
 Additional information can be attached to each report by adding a `metadata`
-url parameter to each report. That value will be copied verbatim into the
-logged report.
+URL parameter to the reporting endpoint. That value will be copied verbatim
+into the logged report.
 
-For example a report sent to `https://collector.example.com/?metadata=foobar`
+For example a report sent to `https://collector.example.com/csp?metadata=foobar`
 will include field `metadata` with value `foobar`.
 
-If `query-params-metadata` is set, instead all query parameters are logged as a
-map, e.g. `https://collector.example.com/?env=production&mode=enforce` will
-result in `"metadata": {"env": "production", "mode": "enforce"}` in JSON
-format, and `metadata="map[env:production mode:enforce]"` in default format.
+If `--query-params-metadata` is set, instead all query parameters are logged
+as a map, e.g. `https://collector.example.com/csp?env=production&mode=enforce`
+will result in `"metadata": {"env": "production", "mode": "enforce"}` in JSON
+format, and `metadata="map[env:production mode:enforce]"` in text format.
 
-### `report-only` mode
+### Output formats
 
-Both CSP and NEL have dedicated `report-only` endpoints (`/csp/report-only` and
-`/nel/report-only`). Reports received on these endpoints are logged identically
-to their enforced counterparts, but with `report_only=true` in the log output.
-This lets you distinguish enforced violations from report-only ones in your log
-aggregation tool without needing separate collector instances.
+The output format can be controlled by passing `--output-format <type>`
+to the executable. Available formats are:
 
-For CSP, a `disposition` of `enforce` or `report` in the report body takes
-precedence over the endpoint, since the browser knows which header the policy
-came from. The endpoint is only used when a browser omits `disposition`.
+- **Text**: A key/value output that quotes all the values. Example:
+  `blocked_uri="about:blank" ...`
+- **JSON**: Single line, compressed JSON object. Example:
+  `{"blocked_uri":"about:blank"}`
 
-### Metrics
+The default formatter is text.
+
+## Metrics
 
 Prometheus metrics are exposed on a dedicated endpoint:
 
@@ -279,46 +369,25 @@ scrape_configs:
 
 If you expose metrics on a non-localhost interface using `--metrics-bind-addr`, protect access with network controls (firewall rules, private network, or service mesh policy).
 
-### Output formats
+## Logging and visualisation
 
-The output format can be controlled by passing `--output-format <type>`
-to the executable. Available formats are:
-
-- **Text**: A key/value output that quotes all the values. Example:
-  `blocked_uri="about:blank" ...`
-- **JSON**: Single line, compressed JSON object. Example:
-  `{"blocked_uri":"about:blank"}`
-
-The default formatter is text.
-
-### Writing to a file instead of just STDOUT
-
-If you'd rather have these violations end up in a file, I suggest just
-redirecting the output into a file like so:
+Reports are logged to stdout. If you'd rather have them end up in a file,
+redirect the output:
 
 ```sh
-$ ./csp_collector 2>> /path/to/violations.log
+./csp_collector >> /path/to/violations.log
 ```
 
-### Visualisation
+This project purposely doesn't try to solve the problem of visualising the
+report data, because there are already plenty of good tools for it. Once
+reports are being collected, ship them to your favourite log aggregation tool.
 
-This project purposely doesn't try to solve the problem of visualing the
-violation data because there are already a bunch of great solutions out
-there. Once you have your violations being collected, be sure to slurp
-them into your favourite log aggregation tool.
+## Releasing
 
-### Deployments
-
-Currently supported deployment mechanisms:
-
-- [kubernetes/helm][3]
-- [systemd][4]
-
-### Release
-
-- Checkout `master`.
-- Create a tag and push.
-- GitHub Actions will build, publish a new release, and publish the Helm chart.
+- Check out `master`.
+- Create a tag and push it.
+- GitHub Actions builds and publishes the release, the Docker image and the
+  Helm chart.
 
 [1]: https://github.com/jacobbednarz/go-csp-collector/blob/master/sample.filterlist.txt
 [2]: https://github.com/jacobbednarz/go-csp-collector/releases
