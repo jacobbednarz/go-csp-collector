@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
@@ -9,6 +10,11 @@ import (
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 	log "github.com/sirupsen/logrus"
 )
+
+// maxBodyBytes caps how much of a request body is read. Chrome queues at most
+// 100 reports, and each CSP report repeats the full policy, which header size
+// limits keep to roughly 32KB, so a real batch stays near 3MB at most.
+const maxBodyBytes = 5 << 20
 
 // ReportTyped lets the handler check a decoded item's Reporting API `type`
 // without type-specific code.
@@ -85,7 +91,16 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	var maxErr *http.MaxBytesError
+	if errors.As(err, &maxErr) {
+		if h.Metrics != nil {
+			h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "body_too_large").Inc()
+		}
+		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		h.Logger.Debugf("request body exceeds %d bytes", maxBodyBytes)
+		return
+	}
 	if err != nil {
 		if h.Metrics != nil {
 			h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "decode_error").Inc()

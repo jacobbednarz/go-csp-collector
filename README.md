@@ -353,7 +353,7 @@ The collector exports:
 | `csp_collector_nel_reports_total` | Counter | `mode` | Successfully processed NEL reports |
 | `csp_collector_reports_filtered_total` | Counter | `handler`, `reason` | Reports dropped by URI/domain filters |
 | `csp_collector_reports_ignored_total` | Counter | `handler`, `reason` | Reports intentionally ignored (for example unsupported NEL types) |
-| `csp_collector_reports_errors_total` | Counter | `handler`, `type` | Rejected reports (decode or validation failures) |
+| `csp_collector_reports_errors_total` | Counter | `handler`, `type` | Rejected reports: decode or validation failures, or a request body over the 5 MiB limit (`body_too_large`) |
 | `csp_collector_http_request_duration_seconds` | Histogram | `handler`, `route`, `method`, `code` | HTTP request duration for report-ingestion endpoints |
 | `csp_collector_http_requests_in_flight` | Gauge | `handler`, `route` | Active in-flight report-ingestion requests |
 | `go_*` / `process_*` | Various | client-go defaults | Runtime and process health metrics |
