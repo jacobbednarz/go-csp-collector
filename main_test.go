@@ -348,6 +348,45 @@ func TestNewRouterOnlyRegistersEnabledEndpoints(t *testing.T) {
 	}
 }
 
+// A known path with the wrong method is a 405 naming the allowed methods,
+// not a 404, so a misconfigured client can tell the two apart. Uncleaned
+// paths redirect with a 307, which keeps a POST and its body; a 301 lets a
+// client retry as a GET, losing the report.
+func TestNewRouterMethodAndPathHandling(t *testing.T) {
+	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t)}, slog.New(slog.DiscardHandler), metrics.New(prometheus.NewRegistry()))
+
+	tests := []struct {
+		name         string
+		method       string
+		path         string
+		wantStatus   int
+		wantAllow    string
+		wantLocation string
+	}{
+		{name: "csp_get", method: http.MethodGet, path: "/csp", wantStatus: http.StatusMethodNotAllowed, wantAllow: "POST"},
+		{name: "root_get", method: http.MethodGet, path: "/", wantStatus: http.StatusMethodNotAllowed, wantAllow: "POST"},
+		{name: "reporting_api_put", method: http.MethodPut, path: "/reporting-api/csp", wantStatus: http.StatusMethodNotAllowed, wantAllow: "OPTIONS, POST"},
+		{name: "health_check_post", method: http.MethodPost, path: "/_healthcheck", wantStatus: http.StatusMethodNotAllowed, wantAllow: "GET, HEAD"},
+		{name: "health_check_head", method: http.MethodHead, path: "/_healthcheck", wantStatus: http.StatusOK},
+		{name: "unknown_path", method: http.MethodPost, path: "/nope", wantStatus: http.StatusNotFound},
+		{name: "trailing_slash", method: http.MethodPost, path: "/csp/", wantStatus: http.StatusNotFound},
+		{name: "unclean_path", method: http.MethodPost, path: "//csp", wantStatus: http.StatusTemporaryRedirect, wantLocation: "/csp"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, httptest.NewRequest(tt.method, tt.path, strings.NewReader("[]")))
+
+			got := []any{rr.Code, rr.Header().Get("Allow"), rr.Header().Get("Location")}
+			want := []any{tt.wantStatus, tt.wantAllow, tt.wantLocation}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("%s %s: (status, Allow, Location) = %v, want %v", tt.method, tt.path, got, want)
+			}
+		})
+	}
+}
+
 // Without timeouts a client can hold a connection open indefinitely by
 // sending its headers or body slowly.
 func TestNewServerSetsTimeouts(t *testing.T) {

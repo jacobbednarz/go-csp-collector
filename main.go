@@ -21,7 +21,6 @@ import (
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 
-	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -114,6 +113,12 @@ func main() {
 			fatal("unable to read domain filter list", "path", *blockedDomainFile, "error", err)
 		}
 		blockedDomains = utils.TrimEmptyAndComments(strings.Split(string(content), "\n"))
+	}
+
+	// The path becomes part of a ServeMux pattern, where braces are
+	// wildcards and a missing leading slash is a panic.
+	if !strings.HasPrefix(*healthCheckPath, "/") || strings.ContainsAny(*healthCheckPath, "{} \t") {
+		fatal("invalid --health-check-path, it must start with / and can't contain spaces or braces", "path", *healthCheckPath)
 	}
 
 	enabledEndpoints, err := parseEndpoints(*endpoints)
@@ -289,9 +294,9 @@ func parseEndpoints(value string) (map[string]bool, error) {
 
 // newRouter registers the report endpoints for each enabled group, kept
 // out of main so the route table itself can be tested.
-func newRouter(cfg routerConfig, logger *slog.Logger, m *metrics.Metrics) *mux.Router {
-	r := mux.NewRouter()
-	r.HandleFunc(cfg.healthCheckPath, handler.HealthcheckHandler).Methods("GET")
+func newRouter(cfg routerConfig, logger *slog.Logger, m *metrics.Metrics) *http.ServeMux {
+	r := http.NewServeMux()
+	r.HandleFunc("GET "+cfg.healthCheckPath, handler.HealthcheckHandler)
 
 	wrapWithPrometheus := func(handlerName string, route string, h http.Handler) http.Handler {
 		labels := prometheus.Labels{"handler": handlerName, "route": route}
@@ -302,60 +307,58 @@ func newRouter(cfg routerConfig, logger *slog.Logger, m *metrics.Metrics) *mux.R
 	}
 
 	if cfg.endpoints["csp"] {
-		r.Handle("/csp/report-only", wrapWithPrometheus("csp", "/csp/report-only", handler.NewCSPHandler(
+		r.Handle("POST /csp/report-only", wrapWithPrometheus("csp", "/csp/report-only", handler.NewCSPHandler(
 			true, cfg.blockedURIs, cfg.blockedDomains, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
-		))).Methods("POST")
+		)))
 
-		r.Handle("/csp", wrapWithPrometheus("csp", "/csp", handler.NewCSPHandler(
+		r.Handle("POST /csp", wrapWithPrometheus("csp", "/csp", handler.NewCSPHandler(
 			false, cfg.blockedURIs, cfg.blockedDomains, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
-		))).Methods("POST")
+		)))
 
-		r.Handle("/", wrapWithPrometheus("csp", "/", handler.NewCSPHandler(
+		r.Handle("POST /{$}", wrapWithPrometheus("csp", "/", handler.NewCSPHandler(
 			false, cfg.blockedURIs, cfg.blockedDomains, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
-		))).Methods("POST")
+		)))
 	}
 
 	if cfg.endpoints["reporting-api-csp"] {
-		r.HandleFunc("/reporting-api/csp", handler.ReportAPICorsHandler).Methods("OPTIONS")
-		r.Handle("/reporting-api/csp", wrapWithPrometheus("reporting_api_csp", "/reporting-api/csp", handler.NewReportAPICSPHandler(
+		r.HandleFunc("OPTIONS /reporting-api/csp", handler.ReportAPICorsHandler)
+		r.Handle("POST /reporting-api/csp", wrapWithPrometheus("reporting_api_csp", "/reporting-api/csp", handler.NewReportAPICSPHandler(
 			cfg.blockedURIs, cfg.blockedDomains, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
-		))).Methods("POST")
+		)))
 	}
 
 	if cfg.endpoints["nel"] {
-		r.HandleFunc("/nel/report-only", handler.ReportAPICorsHandler).Methods("OPTIONS")
-		r.Handle("/nel/report-only", wrapWithPrometheus("nel", "/nel/report-only", handler.NewNELHandler(
+		r.HandleFunc("OPTIONS /nel/report-only", handler.ReportAPICorsHandler)
+		r.Handle("POST /nel/report-only", wrapWithPrometheus("nel", "/nel/report-only", handler.NewNELHandler(
 			true, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
-		))).Methods("POST")
+		)))
 
-		r.HandleFunc("/nel", handler.ReportAPICorsHandler).Methods("OPTIONS")
-		r.Handle("/nel", wrapWithPrometheus("nel", "/nel", handler.NewNELHandler(
+		r.HandleFunc("OPTIONS /nel", handler.ReportAPICorsHandler)
+		r.Handle("POST /nel", wrapWithPrometheus("nel", "/nel", handler.NewNELHandler(
 			false, cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
-		))).Methods("POST")
+		)))
 	}
 
 	if cfg.endpoints["reporting-api-coop"] {
-		r.HandleFunc("/reporting-api/coop", handler.ReportAPICorsHandler).Methods("OPTIONS")
-		r.Handle("/reporting-api/coop", wrapWithPrometheus("reporting_api_coop", "/reporting-api/coop", handler.NewReportAPICOOPHandler(
+		r.HandleFunc("OPTIONS /reporting-api/coop", handler.ReportAPICorsHandler)
+		r.Handle("POST /reporting-api/coop", wrapWithPrometheus("reporting_api_coop", "/reporting-api/coop", handler.NewReportAPICOOPHandler(
 			cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
-		))).Methods("POST")
+		)))
 	}
 
 	if cfg.endpoints["reporting-api-coep"] {
-		r.HandleFunc("/reporting-api/coep", handler.ReportAPICorsHandler).Methods("OPTIONS")
-		r.Handle("/reporting-api/coep", wrapWithPrometheus("reporting_api_coep", "/reporting-api/coep", handler.NewReportAPICOEPHandler(
+		r.HandleFunc("OPTIONS /reporting-api/coep", handler.ReportAPICorsHandler)
+		r.Handle("POST /reporting-api/coep", wrapWithPrometheus("reporting_api_coep", "/reporting-api/coep", handler.NewReportAPICOEPHandler(
 			cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
-		))).Methods("POST")
+		)))
 	}
 
 	if cfg.endpoints["reporting-api-default"] {
-		r.HandleFunc("/reporting-api/default", handler.ReportAPICorsHandler).Methods("OPTIONS")
-		r.Handle("/reporting-api/default", wrapWithPrometheus("reporting_api_default", "/reporting-api/default", handler.NewReportAPIDefaultHandler(
+		r.HandleFunc("OPTIONS /reporting-api/default", handler.ReportAPICorsHandler)
+		r.Handle("POST /reporting-api/default", wrapWithPrometheus("reporting_api_default", "/reporting-api/default", handler.NewReportAPIDefaultHandler(
 			cfg.truncateQueryStringFragment, cfg.logClientIP, cfg.logTruncatedClientIP, cfg.metadataObject, logger, m,
-		))).Methods("POST")
+		)))
 	}
-
-	r.NotFoundHandler = r.NewRoute().HandlerFunc(http.NotFound).GetHandler()
 
 	return r
 }
