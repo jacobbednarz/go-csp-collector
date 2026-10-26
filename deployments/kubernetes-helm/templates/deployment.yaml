@@ -86,6 +86,10 @@ spec:
           {{- if .Values.custom.queryParamsMetadata }}
             - "--query-params-metadata"
           {{- end }}
+          {{- if .Values.custom.endpoints }}
+            - "--endpoints"
+            - {{ .Values.custom.endpoints | quote }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 8080
