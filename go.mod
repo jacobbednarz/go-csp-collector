@@ -4,10 +4,7 @@ go 1.27.0
 
 toolchain go1.27.3
 
-require (
-	github.com/gorilla/mux v1.8.1
-	github.com/prometheus/client_golang v1.25.0
-)
+require github.com/prometheus/client_golang v1.25.0
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
