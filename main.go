@@ -85,6 +85,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Flag parsing stops at the first argument that isn't a flag, so
+	// anything after it would be silently ignored. The image's entrypoint
+	// is the binary, so an old `/csp_collector --flag` command lands here.
+	if flag.NArg() > 0 {
+		fatal("unexpected argument, only flags are accepted", "argument", flag.Arg(0))
+	}
+
 	// Both write the same client_ip field, so one would silently win.
 	if *logClientIP && *logTruncatedClientIP {
 		fatal("--log-client-ip and --log-truncated-client-ip can't be combined, pick one")
