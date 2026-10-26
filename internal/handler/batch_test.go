@@ -301,7 +301,7 @@ func TestBatchReportHandlerValidateRejectsWithDefaultMetric(t *testing.T) {
 		Logger:      l,
 		Metrics:     m,
 		Process:     passthroughProcess,
-		Validate: func(items []testReport) (string, error) {
+		Validate: func(item testReport) (string, error) {
 			return "some_reason", errors.New("rejected")
 		},
 	}
@@ -310,8 +310,8 @@ func TestBatchReportHandlerValidateRejectsWithDefaultMetric(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("test", "some_reason")); got != 1 {
 		t.Fatalf("reports_errors_total some_reason = %v, want 1 (default fallback metric)", got)
@@ -328,7 +328,7 @@ func TestBatchReportHandlerValidateRejectsWithOverrideMetric(t *testing.T) {
 		Logger:      l,
 		Metrics:     m,
 		Process:     passthroughProcess,
-		Validate: func(items []testReport) (string, error) {
+		Validate: func(item testReport) (string, error) {
 			return "some_reason", errors.New("rejected")
 		},
 		RecordValidationErrorMetric: func(reason string) {
@@ -340,14 +340,89 @@ func TestBatchReportHandlerValidateRejectsWithOverrideMetric(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	if overrideCalledWith != "some_reason" {
 		t.Fatalf("expected RecordValidationErrorMetric to be called with %q, got %q", "some_reason", overrideCalledWith)
 	}
 	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("test", "some_reason")); got != 0 {
 		t.Fatalf("reports_errors_total some_reason = %v, want 0 (override should replace the default, not add to it)", got)
+	}
+}
+
+// A rejected report in a batch is skipped, not fatal. Under the Reporting
+// API any non-2xx response is an upload failure: the browser discards every
+// report in the batch and backs off the endpoint, so one filtered report
+// must not take the well-formed ones down with it.
+func TestBatchReportHandlerValidateSkipsRejectedItemInBatch(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l, _ := newTestLogger()
+	hook := logtest.NewLocal(l)
+	h := &BatchReportHandler[testReport]{
+		HandlerName: "test",
+		Logger:      l,
+		Metrics:     m,
+		Process:     passthroughProcess,
+		Validate: func(item testReport) (string, error) {
+			if item.Value == "bad" {
+				return "some_reason", errors.New("rejected")
+			}
+			return "", nil
+		},
+	}
+
+	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"good"},{"type":"x","value":"bad"}]`))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	wantData := logrus.Fields{"value": "good", "metadata": nil, "path": "/batch"}
+	got := hook.AllEntries()
+	if len(got) != 1 || !reflect.DeepEqual(got[0].Data, wantData) {
+		t.Fatalf("expected only the good report logged as %v, got %v", wantData, got)
+	}
+	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("test", "some_reason")); got != 1 {
+		t.Errorf("reports_errors_total some_reason = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(m.Reports.WithLabelValues("test", "enforced")); got != 1 {
+		t.Errorf("reports_total = %v, want 1", got)
+	}
+}
+
+func TestBatchReportHandlerValidateRejectsSingleObject(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	l, buf := newTestLogger()
+	h := &BatchReportHandler[testReport]{
+		HandlerName:  "test",
+		SingleObject: true,
+		Logger:       l,
+		Metrics:      m,
+		Process:      passthroughProcess,
+		Validate: func(item testReport) (string, error) {
+			return "some_reason", errors.New("rejected")
+		},
+	}
+
+	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`{"type":"x","value":"one"}`))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+	if rr.Body.String() != "rejected\n" {
+		t.Errorf("response body = %q, want %q", rr.Body.String(), "rejected\n")
+	}
+	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("test", "some_reason")); got != 1 {
+		t.Errorf("reports_errors_total some_reason = %v, want 1", got)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected nothing logged at info level, got: %s", buf.String())
 	}
 }
 

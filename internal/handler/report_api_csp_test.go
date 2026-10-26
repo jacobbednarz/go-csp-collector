@@ -151,8 +151,8 @@ func TestGenericReportAPICSPHandlerMetricsFilteredURI(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	if got := testutil.ToFloat64(m.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_uri")); got != 1 {
 		t.Fatalf("reports_filtered_total blocked_uri = %v, want 1", got)
@@ -169,8 +169,8 @@ func TestGenericReportAPICSPHandlerValidationRejectionWithNilMetrics(t *testing.
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 even with nil metrics, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 even with nil metrics, got %d", rr.Code)
 	}
 }
 
@@ -186,8 +186,8 @@ func TestGenericReportAPICSPHandlerMetricsFilteredDomain(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	if got := testutil.ToFloat64(m.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_domain")); got != 1 {
 		t.Fatalf("reports_filtered_total blocked_domain = %v, want 1", got)
@@ -206,14 +206,45 @@ func TestGenericReportAPICSPHandlerMetricsValidationError(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("reporting_api_csp", "validation_error")); got != 1 {
 		t.Fatalf("reports_errors_total validation_error = %v, want 1 (should land on ReportErrors, not ReportFiltered)", got)
 	}
 	if got := testutil.ToFloat64(m.ReportFiltered.WithLabelValues("reporting_api_csp", "validation_error")); got != 0 {
 		t.Fatalf("reports_filtered_total validation_error = %v, want 0", got)
+	}
+}
+
+func TestGenericReportAPICSPHandlerFilteredReportKeepsRestOfBatch(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+	var logBuf bytes.Buffer
+	l := logrus.New()
+	l.SetOutput(&logBuf)
+
+	h := NewReportAPICSPHandler([]string{"chrome-extension://"}, nil, false, false, false, false, l, m)
+	body := []byte(`[
+		{"type":"csp-violation","body":{"blockedURL":"https://cdn.example.com/good.js","documentURL":"https://example.com","disposition":"enforce"}},
+		{"type":"csp-violation","body":{"blockedURL":"chrome-extension://abc/inject.js","documentURL":"https://example.com","disposition":"enforce"}}
+	]`)
+	req := httptest.NewRequest("POST", "/reporting-api/csp", bytes.NewBuffer(body))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if got := testutil.ToFloat64(m.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_uri")); got != 1 {
+		t.Errorf("reports_filtered_total blocked_uri = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(m.Reports.WithLabelValues("reporting_api_csp", "enforced")); got != 1 {
+		t.Errorf("reports_total enforced = %v, want 1", got)
+	}
+	out := logBuf.String()
+	if !strings.Contains(out, "good.js") || strings.Contains(out, "inject.js") {
+		t.Errorf("expected only the unfiltered report logged, got: %s", out)
 	}
 }
 

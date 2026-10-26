@@ -44,10 +44,14 @@ type BatchReportHandler[T ReportTyped] struct {
 	Logger  *log.Logger
 	Metrics *metrics.Metrics
 
-	// Validate runs once against all decoded items before any are
-	// processed; a non-nil error rejects the whole request with 400.
-	// reason is the metric label for the rejection cause.
-	Validate func(items []T) (reason string, err error)
+	// Validate runs against each type-matched report before it's processed.
+	// reason is the metric label for the rejection cause. A rejected report
+	// in a batch is counted and skipped: the Reporting API treats any
+	// non-2xx response as a failed upload, discarding the whole batch and
+	// backing off the endpoint, so one filtered report must not cost the
+	// rest. In SingleObject mode the report is the request, so a rejection
+	// is a 400.
+	Validate func(report T) (reason string, err error)
 
 	// Process turns one decoded, type-matched report into log fields and a
 	// metrics mode. Field truncation is the caller's responsibility.
@@ -102,19 +106,6 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if h.Validate != nil {
-		if reason, err := h.Validate(items); err != nil {
-			if h.RecordValidationErrorMetric != nil {
-				h.RecordValidationErrorMetric(reason)
-			} else if h.Metrics != nil {
-				h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, reason).Inc()
-			}
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			h.Logger.Debugf("received invalid payload: %s", err.Error())
-			return
-		}
-	}
-
 	var metadata interface{}
 	if h.MetadataObject {
 		metadataMap := make(map[string]string)
@@ -132,6 +123,22 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 				h.Metrics.ReportIgnored.WithLabelValues(h.HandlerName, "unsupported_type").Inc()
 			}
 			continue
+		}
+
+		if h.Validate != nil {
+			if reason, err := h.Validate(item); err != nil {
+				if h.RecordValidationErrorMetric != nil {
+					h.RecordValidationErrorMetric(reason)
+				} else if h.Metrics != nil {
+					h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, reason).Inc()
+				}
+				h.Logger.Debugf("received invalid payload: %s", err.Error())
+				if h.SingleObject {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				continue
+			}
 		}
 
 		result := h.Process(item, r, metadata)

@@ -47,22 +47,17 @@ func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryS
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
-		Validate: func(items []ReportAPIReport) (string, error) {
-			for _, violation := range items {
-				if violation.Type != "csp-violation" {
-					continue
+		Validate: func(report ReportAPIReport) (string, error) {
+			for _, value := range blockedURIs {
+				if strings.HasPrefix(report.Body.BlockedURL, value) {
+					return "blocked_uri", fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
 				}
-				for _, value := range blockedURIs {
-					if strings.HasPrefix(violation.Body.BlockedURL, value) {
-						return "blocked_uri", fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
-					}
-				}
-				if isBlockedByDomain(violation.Body.BlockedURL, blockedDomains) {
-					return "blocked_domain", fmt.Errorf("blocked URI ('%s') is an invalid resource", violation.Body.BlockedURL)
-				}
-				if !strings.HasPrefix(violation.Body.DocumentURL, "http") {
-					return "validation_error", fmt.Errorf("document URI ('%s') is invalid", violation.Body.DocumentURL)
-				}
+			}
+			if isBlockedByDomain(report.Body.BlockedURL, blockedDomains) {
+				return "blocked_domain", fmt.Errorf("blocked URI ('%s') is an invalid resource", report.Body.BlockedURL)
+			}
+			if !strings.HasPrefix(report.Body.DocumentURL, "http") {
+				return "validation_error", fmt.Errorf("document URI ('%s') is invalid", report.Body.DocumentURL)
 			}
 			return "", nil
 		},

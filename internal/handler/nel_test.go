@@ -67,38 +67,31 @@ func TestGenericNELHandlerInvalidJSON(t *testing.T) {
 	}
 }
 
-func TestGenericNELHandlerInvalidURLReturns400(t *testing.T) {
-	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
-	h := NewNELHandler(false, false, false, false, false, l, nil)
-
-	payload, _ := json.Marshal(sampleNELReport("about:blank"))
-	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", rr.Code)
-	}
-}
-
-func TestGenericNELHandlerMetricsValidationError(t *testing.T) {
+func TestGenericNELHandlerSkipsInvalidURLAndKeepsRestOfBatch(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
+	var logBuf bytes.Buffer
 	l := logrus.New()
-	l.SetOutput(bytes.NewBuffer(nil))
+	l.SetOutput(&logBuf)
 	h := NewNELHandler(false, false, false, false, false, l, m)
 
-	payload, _ := json.Marshal(sampleNELReport("about:blank"))
+	payload, _ := json.Marshal(append(sampleNELReport("about:blank"), sampleNELReport("https://example.com/nel-good")...))
 	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("nel", "validation_error")); got != 1 {
-		t.Fatalf("reports_errors_total validation_error = %v, want 1", got)
+		t.Errorf("reports_errors_total validation_error = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(m.NELReports.WithLabelValues("enforced")); got != 1 {
+		t.Errorf("nel_reports_total enforced = %v, want 1", got)
+	}
+	out := logBuf.String()
+	if !strings.Contains(out, "nel-good") || strings.Contains(out, "about:blank") {
+		t.Errorf("expected only the valid report logged, got: %s", out)
 	}
 }
 
