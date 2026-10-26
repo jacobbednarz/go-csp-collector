@@ -87,6 +87,7 @@ func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryS
 				"effective_directive": report.Body.EffectiveDirective,
 				"original_policy":     report.Body.OriginalPolicy,
 				"disposition":         report.Body.Disposition,
+				"script_sample":       report.Body.Sample,
 				"status_code":         report.Body.StatusCode,
 				"source_file":         report.Body.SourceFile,
 				"line_number":         report.Body.LineNumber,
