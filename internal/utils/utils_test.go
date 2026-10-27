@@ -13,7 +13,9 @@ import (
 	"testing"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/handler"
+	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestFilterListProcessing(t *testing.T) {
@@ -71,7 +73,7 @@ func TestLogsPath(t *testing.T) {
 	}
 	recorder := httptest.NewRecorder()
 
-	cspViolationHandler := handler.NewCSPHandler(false, []string{"foo"}, nil, false, false, false, false, log, nil)
+	cspViolationHandler := handler.NewCSPHandler(false, []string{"foo"}, nil, handler.Options{Logger: log, Metrics: metrics.New(prometheus.NewRegistry())})
 	cspViolationHandler.ServeHTTP(recorder, request)
 
 	response := recorder.Result()

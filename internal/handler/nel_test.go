@@ -39,7 +39,7 @@ func sampleNELReport(url string) []NELReport {
 
 func TestGenericNELHandlerDisallowedMethods(t *testing.T) {
 	l, _ := newTestLogger()
-	h := NewNELHandler(false, false, false, false, false, l, nil)
+	h := NewNELHandler(false, Options{Logger: l, Metrics: newTestMetrics()})
 
 	for _, method := range []string{"GET", "PUT", "DELETE", "PATCH", "TRACE"} {
 		t.Run(method, func(t *testing.T) {
@@ -55,7 +55,7 @@ func TestGenericNELHandlerDisallowedMethods(t *testing.T) {
 
 func TestGenericNELHandlerInvalidJSON(t *testing.T) {
 	l, _ := newTestLogger()
-	h := NewNELHandler(false, false, false, false, false, l, nil)
+	h := NewNELHandler(false, Options{Logger: l, Metrics: newTestMetrics()})
 
 	req := httptest.NewRequest("POST", "/nel", strings.NewReader("not json"))
 	rr := httptest.NewRecorder()
@@ -70,7 +70,7 @@ func TestGenericNELHandlerSkipsInvalidURLAndKeepsRestOfBatch(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, logBuf := newTestLogger()
-	h := NewNELHandler(false, false, false, false, false, l, m)
+	h := NewNELHandler(false, Options{Logger: l, Metrics: m})
 
 	payload, _ := json.Marshal(append(sampleNELReport("about:blank"), sampleNELReport("https://example.com/nel-good")...))
 	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
@@ -94,7 +94,7 @@ func TestGenericNELHandlerSkipsInvalidURLAndKeepsRestOfBatch(t *testing.T) {
 
 func TestGenericNELHandlerLogsReportOnly(t *testing.T) {
 	l, logBuf := newTestLogger()
-	h := NewNELHandler(true, false, false, false, false, l, nil)
+	h := NewNELHandler(true, Options{Logger: l, Metrics: newTestMetrics()})
 
 	payload, _ := json.Marshal(sampleNELReport("https://example.com/page"))
 	req := httptest.NewRequest("POST", "/nel/report-only", bytes.NewBuffer(payload))
@@ -111,7 +111,7 @@ func TestGenericNELHandlerLogsReportOnly(t *testing.T) {
 
 func TestGenericNELHandlerSkipsNonNetworkErrorReports(t *testing.T) {
 	l, logBuf := newTestLogger()
-	h := NewNELHandler(false, false, false, false, false, l, nil)
+	h := NewNELHandler(false, Options{Logger: l, Metrics: newTestMetrics()})
 
 	reports := []NELReport{
 		{Type: "csp-violation", URL: "https://example.com/"},
@@ -131,7 +131,7 @@ func TestGenericNELHandlerSkipsNonNetworkErrorReports(t *testing.T) {
 
 func TestGenericNELHandlerMixedBatchPreservesWellFormedReport(t *testing.T) {
 	l, logBuf := newTestLoggerAtLevel(slog.LevelDebug)
-	h := NewNELHandler(false, false, false, false, false, l, nil)
+	h := NewNELHandler(false, Options{Logger: l, Metrics: newTestMetrics()})
 
 	payload := []byte(`[
 		{"age":0,"type":"network-error","url":"https://example.com/nel-good","user_agent":"t","body":{"status_code":200,"type":"ok"}},
@@ -159,7 +159,7 @@ func TestGenericNELHandlerMetricsSuccessAndIgnored(t *testing.T) {
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
 
-	h := NewNELHandler(false, false, false, false, false, l, m)
+	h := NewNELHandler(false, Options{Logger: l, Metrics: m})
 	reports := []NELReport{
 		{Type: "network-error", URL: "https://example.com/ok", Body: NELReportBody{Type: "tcp.refused", Phase: "connection"}},
 		{Type: "csp-violation", URL: "https://example.com/skip"},
@@ -193,7 +193,7 @@ func TestGenericNELHandlerRejectsBareObject(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
-	h := NewNELHandler(false, false, false, false, false, l, m)
+	h := NewNELHandler(false, Options{Logger: l, Metrics: m})
 
 	payload, _ := json.Marshal(sampleNELReport("https://example.com/page")[0])
 	req := httptest.NewRequest("POST", "/nel", bytes.NewBuffer(payload))
@@ -210,7 +210,7 @@ func TestGenericNELHandlerRejectsBareObject(t *testing.T) {
 
 func TestGenericNELHandlerTruncatesQueryStringFragment(t *testing.T) {
 	l, rec := newRecordingLogger(slog.LevelInfo)
-	h := NewNELHandler(false, true, false, false, false, l, nil)
+	h := NewNELHandler(false, Options{TruncateQueryStringFragment: true, Logger: l, Metrics: newTestMetrics()})
 
 	reports := []NELReport{
 		{

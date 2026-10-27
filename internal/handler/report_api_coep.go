@@ -2,11 +2,8 @@ package handler
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
-
-	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 )
 
 // COEPReport is a Cross-Origin-Embedder-Policy violation delivered by the
@@ -31,15 +28,11 @@ type COEPReportBody struct {
 }
 
 // NewReportAPICOEPHandler builds the reporting-api/coep handler on BatchReportHandler.
-func NewReportAPICOEPHandler(truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *slog.Logger, m *metrics.Metrics) http.Handler {
+func NewReportAPICOEPHandler(opts Options) http.Handler {
 	return &BatchReportHandler[COEPReport]{
-		HandlerName:          "reporting_api_coep",
-		ExpectedType:         "coep",
-		MetadataObject:       metadataObject,
-		LogClientIP:          logClientIP,
-		LogTruncatedClientIP: logTruncatedClientIP,
-		Logger:               logger,
-		Metrics:              m,
+		HandlerName:  "reporting_api_coep",
+		ExpectedType: "coep",
+		Options:      opts,
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
@@ -64,7 +57,7 @@ func NewReportAPICOEPHandler(truncateQueryStringFragment, logClientIP, logTrunca
 				"path":        r.URL.Path,
 			}
 
-			if truncateQueryStringFragment {
+			if opts.TruncateQueryStringFragment {
 				truncateURLFields(lf, "url", "blocked_uri")
 			}
 

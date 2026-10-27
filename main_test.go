@@ -21,7 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
-var cspViolationReportHandler = handler.NewCSPHandler(false, defaultBlockedURIs, nil, false, false, false, false, slog.New(slog.DiscardHandler), nil)
+var cspViolationReportHandler = handler.NewCSPHandler(false, defaultBlockedURIs, nil, handler.Options{Logger: slog.New(slog.DiscardHandler), Metrics: metrics.New(prometheus.NewRegistry())})
 
 func TestHandlerForDisallowedMethods(t *testing.T) {
 	disallowedMethods := []string{"GET", "DELETE", "PUT", "TRACE", "PATCH"}
@@ -88,7 +88,7 @@ func TestDefaultFilterList(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			l := slog.New(slog.DiscardHandler)
-			h := handler.NewCSPHandler(false, defaultBlockedURIs, nil, false, false, false, false, l, nil)
+			h := handler.NewCSPHandler(false, defaultBlockedURIs, nil, handler.Options{Logger: l, Metrics: metrics.New(prometheus.NewRegistry())})
 
 			body := `{"csp-report":{"document-uri":"https://example.com/","blocked-uri":"` + tt.blockedURI + `"}}`
 			rr := httptest.NewRecorder()
@@ -196,7 +196,7 @@ func TestMetricsEndpointUsesCustomRegistry(t *testing.T) {
 // Access-Control-Allow-Origin and Access-Control-Allow-Headers covering
 // content-type, and otherwise drops the batch and backs off the endpoint.
 func TestReportingAPIRoutesAnswerCORSPreflight(t *testing.T) {
-	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t)}, slog.New(slog.DiscardHandler), metrics.New(prometheus.NewRegistry()))
+	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t), handler: handler.Options{Logger: slog.New(slog.DiscardHandler), Metrics: metrics.New(prometheus.NewRegistry())}})
 
 	for _, path := range []string{"/nel", "/nel/report-only", "/reporting-api/csp", "/reporting-api/coop", "/reporting-api/coep", "/reporting-api/default"} {
 		t.Run(path, func(t *testing.T) {
@@ -231,7 +231,7 @@ func TestReportingAPIRoutesAnswerCORSPreflight(t *testing.T) {
 // implementations apply the CORS check to the actual response.
 func TestReportingAPIRoutesSetCORSHeadersOnUpload(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t)}, logger, metrics.New(prometheus.NewRegistry()))
+	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t), handler: handler.Options{Logger: logger, Metrics: metrics.New(prometheus.NewRegistry())}})
 
 	for _, path := range []string{"/nel", "/nel/report-only", "/reporting-api/csp", "/reporting-api/coop", "/reporting-api/coep", "/reporting-api/default"} {
 		t.Run(path, func(t *testing.T) {
@@ -328,7 +328,7 @@ func TestNewRouterOnlyRegistersEnabledEndpoints(t *testing.T) {
 				t.Fatalf("parseEndpoints(%q): %v", enabled, err)
 			}
 			logger := slog.New(slog.DiscardHandler)
-			r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: endpoints}, logger, metrics.New(prometheus.NewRegistry()))
+			r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: endpoints, handler: handler.Options{Logger: logger, Metrics: metrics.New(prometheus.NewRegistry())}})
 
 			for _, route := range routes {
 				rr := httptest.NewRecorder()
@@ -353,7 +353,7 @@ func TestNewRouterOnlyRegistersEnabledEndpoints(t *testing.T) {
 // paths redirect with a 307, which keeps a POST and its body; a 301 lets a
 // client retry as a GET, losing the report.
 func TestNewRouterMethodAndPathHandling(t *testing.T) {
-	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t)}, slog.New(slog.DiscardHandler), metrics.New(prometheus.NewRegistry()))
+	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t), handler: handler.Options{Logger: slog.New(slog.DiscardHandler), Metrics: metrics.New(prometheus.NewRegistry())}})
 
 	tests := []struct {
 		name         string

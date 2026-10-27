@@ -2,11 +2,9 @@ package handler
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 
-	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 )
 
@@ -35,15 +33,11 @@ type ReportAPIViolation struct {
 }
 
 // NewReportAPICSPHandler builds the reporting-api/csp handler on BatchReportHandler.
-func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *slog.Logger, m *metrics.Metrics) http.Handler {
+func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, opts Options) http.Handler {
 	return &BatchReportHandler[ReportAPIReport]{
-		HandlerName:          "reporting_api_csp",
-		ExpectedType:         "csp-violation",
-		MetadataObject:       metadataObject,
-		LogClientIP:          logClientIP,
-		LogTruncatedClientIP: logTruncatedClientIP,
-		Logger:               logger,
-		Metrics:              m,
+		HandlerName:  "reporting_api_csp",
+		ExpectedType: "csp-violation",
+		Options:      opts,
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
@@ -63,16 +57,13 @@ func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryS
 		},
 
 		RecordValidationErrorMetric: func(reason string) {
-			if m == nil {
-				return
-			}
 			switch reason {
 			case "blocked_uri":
-				m.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_uri").Inc()
+				opts.Metrics.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_uri").Inc()
 			case "blocked_domain":
-				m.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_domain").Inc()
+				opts.Metrics.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_domain").Inc()
 			default:
-				m.ReportErrors.WithLabelValues("reporting_api_csp", "validation_error").Inc()
+				opts.Metrics.ReportErrors.WithLabelValues("reporting_api_csp", "validation_error").Inc()
 			}
 		},
 
@@ -96,7 +87,7 @@ func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, truncateQueryS
 				"path":                r.URL.Path,
 			}
 
-			if truncateQueryStringFragment {
+			if opts.TruncateQueryStringFragment {
 				lf["document_uri"] = utils.TruncateQueryStringFragment(report.Body.DocumentURL)
 				lf["referrer"] = utils.TruncateQueryStringFragment(report.Body.Referrer)
 				lf["blocked_uri"] = utils.TruncateQueryStringFragment(report.Body.BlockedURL)

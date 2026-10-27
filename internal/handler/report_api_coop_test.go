@@ -134,7 +134,7 @@ func TestReportAPICOOPHandlerLogsReport(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			l, rec := newRecordingLogger(slog.LevelInfo)
-			h := NewReportAPICOOPHandler(tt.truncate, false, false, false, l, nil)
+			h := NewReportAPICOOPHandler(Options{TruncateQueryStringFragment: tt.truncate, Logger: l, Metrics: newTestMetrics()})
 
 			rr := httptest.NewRecorder()
 			h.ServeHTTP(rr, httptest.NewRequest("POST", "/reporting-api/coop", strings.NewReader(tt.body)))
@@ -160,7 +160,7 @@ func TestReportAPICOOPHandlerMetrics(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
-	h := NewReportAPICOOPHandler(false, false, false, false, l, m)
+	h := NewReportAPICOOPHandler(Options{Logger: l, Metrics: m})
 
 	body := `[
 		{"type":"coop","url":"https://example.com/","body":{"disposition":"enforce","type":"navigation-from-response"}},
@@ -192,7 +192,7 @@ func TestReportAPICOOPHandlerMetrics(t *testing.T) {
 
 func TestReportAPICOOPHandlerSetsCORSHeaderOnResponse(t *testing.T) {
 	l, _ := newTestLogger()
-	h := NewReportAPICOOPHandler(false, false, false, false, l, nil)
+	h := NewReportAPICOOPHandler(Options{Logger: l, Metrics: newTestMetrics()})
 
 	req := httptest.NewRequest("POST", "/reporting-api/coop", strings.NewReader("[]"))
 	req.Header.Set("Origin", "https://example.com")

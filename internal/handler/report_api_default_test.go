@@ -17,7 +17,7 @@ import (
 // body as raw JSON, since its shape depends on the type.
 func TestReportAPIDefaultHandlerLogsEveryType(t *testing.T) {
 	l, rec := newRecordingLogger(slog.LevelInfo)
-	h := NewReportAPIDefaultHandler(false, false, false, false, l, nil)
+	h := NewReportAPIDefaultHandler(Options{Logger: l, Metrics: newTestMetrics()})
 
 	body := `[
 		{"type":"deprecation","url":"https://example.com/a?q=1","age":5,"user_agent":"t","body":{"id":"UnloadHandler","message":"unload is deprecated","lineNumber":3}},
@@ -51,7 +51,7 @@ func TestReportAPIDefaultHandlerLogsEveryType(t *testing.T) {
 // query strings the operator asked to have removed.
 func TestReportAPIDefaultHandlerTruncationOmitsBody(t *testing.T) {
 	l, rec := newRecordingLogger(slog.LevelInfo)
-	h := NewReportAPIDefaultHandler(true, false, false, false, l, nil)
+	h := NewReportAPIDefaultHandler(Options{TruncateQueryStringFragment: true, Logger: l, Metrics: newTestMetrics()})
 
 	body := `[{"type":"deprecation","url":"https://example.com/a?q=1#f","body":{"sourceFile":"https://example.com/app.js?token=secret"}}]`
 	rr := httptest.NewRecorder()
@@ -75,7 +75,7 @@ func TestReportAPIDefaultHandlerMetrics(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
-	h := NewReportAPIDefaultHandler(false, false, false, false, l, m)
+	h := NewReportAPIDefaultHandler(Options{Logger: l, Metrics: m})
 
 	body := `[
 		{"type":"deprecation","url":"https://example.com/"},
@@ -112,7 +112,7 @@ func TestReportAPIDefaultHandlerMetrics(t *testing.T) {
 
 func TestReportAPIDefaultHandlerSetsCORSHeaderOnResponse(t *testing.T) {
 	l, _ := newTestLogger()
-	h := NewReportAPIDefaultHandler(false, false, false, false, l, nil)
+	h := NewReportAPIDefaultHandler(Options{Logger: l, Metrics: newTestMetrics()})
 
 	req := httptest.NewRequest("POST", "/reporting-api/default", strings.NewReader("[]"))
 	req.Header.Set("Origin", "https://example.com")
