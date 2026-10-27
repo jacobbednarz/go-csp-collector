@@ -3,12 +3,9 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
-
-	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 )
 
 // DefaultReport is any report delivered to a Reporting API "default"
@@ -42,14 +39,10 @@ var knownReportTypes = []string{
 }
 
 // NewReportAPIDefaultHandler builds the reporting-api/default handler on BatchReportHandler.
-func NewReportAPIDefaultHandler(truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *slog.Logger, m *metrics.Metrics) http.Handler {
+func NewReportAPIDefaultHandler(opts Options) http.Handler {
 	return &BatchReportHandler[DefaultReport]{
-		HandlerName:          "reporting_api_default",
-		MetadataObject:       metadataObject,
-		LogClientIP:          logClientIP,
-		LogTruncatedClientIP: logTruncatedClientIP,
-		Logger:               logger,
-		Metrics:              m,
+		HandlerName: "reporting_api_default",
+		Options:     opts,
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
@@ -71,7 +64,7 @@ func NewReportAPIDefaultHandler(truncateQueryStringFragment, logClientIP, logTru
 			// URLs inside a body of unknown shape can't be found reliably,
 			// so truncation leaves the body out rather than log URLs the
 			// operator asked to have stripped.
-			if truncateQueryStringFragment {
+			if opts.TruncateQueryStringFragment {
 				truncateURLFields(lf, "url")
 			} else {
 				lf["body"] = string(report.Body)
