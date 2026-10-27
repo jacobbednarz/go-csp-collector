@@ -304,8 +304,8 @@ starting point.
 
 `--filter-domains-file` drops reports whose blocked URI is on a listed domain
 or any subdomain of it. Each line is a bare domain, so `kaspersky-labs.com`
-also matches `gc.kis.v2.scr.kaspersky-labs.com`. See `sample.domainlist.txt`
-for an example. Each check parses the blocked URI to get its hostname, which
+also matches `gc.kis.v2.scr.kaspersky-labs.com`. Matching ignores case and a
+trailing dot, as hostnames do. See `sample.domainlist.txt` for an example. Each check parses the blocked URI to get its hostname, which
 costs roughly 20–35 times more than a prefix check (~180 ns/op against ~5–8
 ns/op). For high-throughput deployments, prefer `--filter-file` and only use
 domains where you need subdomain matching.

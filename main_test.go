@@ -572,3 +572,31 @@ func TestParseFilterList(t *testing.T) {
 		})
 	}
 }
+
+func TestParseDomainList(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+		want    []string
+	}{
+		{name: "lowercase", content: "example.com\nads.example.net\n", want: []string{"example.com", "ads.example.net"}},
+		// Hostnames are case-insensitive, and a trailing dot names the
+		// same host as a fully qualified name.
+		{name: "mixed_case", content: "Example.COM\n", want: []string{"example.com"}},
+		{name: "trailing_dot", content: "example.com.\n", want: []string{"example.com"}},
+		{name: "comments_and_whitespace", content: "# trackers\r\n  Tracker.Example. \r\n\r\n", want: []string{"tracker.example"}},
+		{name: "empty", content: "", want: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := parseDomainList(tt.content); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parseDomainList(%q) = %q, want %q", tt.content, got, tt.want)
+			}
+		})
+	}
+}

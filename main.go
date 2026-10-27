@@ -152,7 +152,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return fail("unable to read domain filter list", "path", *blockedDomainFile, "error", err)
 		}
-		blockedDomains = parseFilterList(string(content))
+		blockedDomains = parseDomainList(string(content))
 	}
 
 	// The path becomes part of a ServeMux pattern, where braces are
@@ -281,6 +281,17 @@ func parseFilterList(content string) []string {
 		entries = append(entries, line)
 	}
 	return entries
+}
+
+// parseDomainList parses a domain filter file. Hostnames are
+// case-insensitive and a trailing dot names the same host, so entries are
+// stored the way the domain filter compares them.
+func parseDomainList(content string) []string {
+	domains := parseFilterList(content)
+	for i, d := range domains {
+		domains[i] = strings.TrimSuffix(strings.ToLower(d), ".")
+	}
+	return domains
 }
 
 // shutdownTimeout is how long in-flight requests get to finish after a
