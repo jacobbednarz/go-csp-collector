@@ -56,6 +56,7 @@ ingress:
 | `image.repository`          | Container image repository                | `jacobbednarz/go-csp-collector`                        |
 | `image.tag`                 | Container image tag                       | Chart app version                                      |
 | `image.pullPolicy`          | Container image pull policy               | `IfNotPresent`                                          |
+| `resources`                 | Container resource requests and limits. A memory limit also sets `GOMEMLIMIT` to it | `{}` |
 | `containerSecurityContext`  | Container security context. Runs as uid 1000 with no capabilities and a read-only root filesystem | See `values.yaml` |
 | `service.annotations`       | Service annotations                       | `{}`                                                    |
 | `metrics.enabled`           | Enables the dedicated metrics listener    | `true`                                                  |

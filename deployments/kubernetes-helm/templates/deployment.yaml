@@ -95,6 +95,18 @@ spec:
             - "--endpoints"
             - {{ .Values.custom.endpoints | quote }}
           {{- end }}
+          {{- if dig "limits" "memory" "" .Values.resources }}
+          {{- /*
+            Go doesn't read the container's memory limit, so without this the
+            heap can grow until the pod is OOM killed instead of the garbage
+            collector working harder as it nears the limit.
+          */}}
+          env:
+            - name: GOMEMLIMIT
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory
+          {{- end }}
           ports:
             - name: http
               containerPort: 8080
