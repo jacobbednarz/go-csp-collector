@@ -33,7 +33,7 @@ func passthroughProcess(report testReport, r *http.Request, metadata interface{}
 
 func TestBatchReportHandlerDisallowedMethod(t *testing.T) {
 	l, _ := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
 	req := httptest.NewRequest("GET", "/batch", nil)
 	rr := httptest.NewRecorder()
@@ -46,7 +46,7 @@ func TestBatchReportHandlerDisallowedMethod(t *testing.T) {
 
 func TestBatchReportHandlerDecodesArray(t *testing.T) {
 	l, buf := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"one"},{"type":"x","value":"two"}]`))
 	rr := httptest.NewRecorder()
@@ -62,7 +62,7 @@ func TestBatchReportHandlerDecodesArray(t *testing.T) {
 
 func TestBatchReportHandlerEmptyArrayIsNoOp(t *testing.T) {
 	l, buf := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[]`))
 	rr := httptest.NewRecorder()
@@ -80,7 +80,7 @@ func TestBatchReportHandlerSingleObjectRejectedByDefault(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Metrics: m, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: m}}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`{"type":"x","value":"one"}`))
 	rr := httptest.NewRecorder()
@@ -96,7 +96,7 @@ func TestBatchReportHandlerSingleObjectRejectedByDefault(t *testing.T) {
 
 func TestBatchReportHandlerSingleObjectAccepted(t *testing.T) {
 	l, buf := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", SingleObject: true, Logger: l, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", SingleObject: true, Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`{"type":"x","value":"one"}`))
 	rr := httptest.NewRecorder()
@@ -125,7 +125,7 @@ func TestBatchReportHandlerSingleObjectRejectsOtherBodies(t *testing.T) {
 			registry := prometheus.NewRegistry()
 			m := metrics.New(registry)
 			l, buf := newTestLogger()
-			h := &BatchReportHandler[testReport]{HandlerName: "test", SingleObject: true, Logger: l, Metrics: m, Process: passthroughProcess}
+			h := &BatchReportHandler[testReport]{HandlerName: "test", SingleObject: true, Process: passthroughProcess, Options: Options{Logger: l, Metrics: m}}
 
 			req := httptest.NewRequest("POST", "/batch", strings.NewReader(tt.body))
 			rr := httptest.NewRecorder()
@@ -151,7 +151,7 @@ func TestBatchReportHandlerBodyReadError(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Metrics: m, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: m}}
 
 	req := httptest.NewRequest("POST", "/batch", errReader{})
 	rr := httptest.NewRecorder()
@@ -171,7 +171,7 @@ func TestBatchReportHandlerBodyTooLarge(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, buf := newTestLoggerAtLevel(slog.LevelDebug)
-	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Metrics: m, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: m}}
 
 	body := `[{"type":"x","value":"` + strings.Repeat("a", maxBodyBytes) + `"}]`
 	rr := httptest.NewRecorder()
@@ -193,7 +193,7 @@ func TestBatchReportHandlerBodyTooLarge(t *testing.T) {
 
 func TestBatchReportHandlerBodyAtLimitIsAccepted(t *testing.T) {
 	l, _ := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
 	prefix, suffix := `[{"type":"x","value":"`, `"}]`
 	body := prefix + strings.Repeat("a", maxBodyBytes-len(prefix)-len(suffix)) + suffix
@@ -211,7 +211,7 @@ func (errReader) Read(p []byte) (int, error) { return 0, errors.New("simulated r
 
 func TestBatchReportHandlerItemDecodeErrorSkipsAndContinues(t *testing.T) {
 	l, buf := newTestLoggerAtLevel(slog.LevelDebug)
-	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"good"},{"type":"x","value":123}]`))
 	rr := httptest.NewRecorder()
@@ -260,7 +260,7 @@ func TestBatchReportHandlerItemDecodeErrorLogLevel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			l, rec := newRecordingLogger(tt.level)
-			h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Process: passthroughProcess}
+			h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
 			req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":123}]`))
 			rr := httptest.NewRecorder()
@@ -280,7 +280,7 @@ func TestBatchReportHandlerItemDecodeErrorMetric(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Metrics: m, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: m}}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":123}]`))
 	rr := httptest.NewRecorder()
@@ -298,7 +298,7 @@ func TestBatchReportHandlerExpectedTypeSkipsAndIncrementsIgnored(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, buf := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", ExpectedType: "wanted", Logger: l, Metrics: m, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", ExpectedType: "wanted", Process: passthroughProcess, Options: Options{Logger: l, Metrics: m}}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"unwanted","value":"skip-me"}]`))
 	rr := httptest.NewRecorder()
@@ -321,12 +321,11 @@ func TestBatchReportHandlerValidateRejectsWithDefaultMetric(t *testing.T) {
 	l, _ := newTestLogger()
 	h := &BatchReportHandler[testReport]{
 		HandlerName: "test",
-		Logger:      l,
-		Metrics:     m,
 		Process:     passthroughProcess,
 		Validate: func(item testReport) (string, error) {
 			return "some_reason", errors.New("rejected")
 		},
+		Options: Options{Logger: l, Metrics: m},
 	}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"one"}]`))
@@ -348,8 +347,6 @@ func TestBatchReportHandlerValidateRejectsWithOverrideMetric(t *testing.T) {
 	var overrideCalledWith string
 	h := &BatchReportHandler[testReport]{
 		HandlerName: "test",
-		Logger:      l,
-		Metrics:     m,
 		Process:     passthroughProcess,
 		Validate: func(item testReport) (string, error) {
 			return "some_reason", errors.New("rejected")
@@ -357,6 +354,7 @@ func TestBatchReportHandlerValidateRejectsWithOverrideMetric(t *testing.T) {
 		RecordValidationErrorMetric: func(reason string) {
 			overrideCalledWith = reason
 		},
+		Options: Options{Logger: l, Metrics: m},
 	}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"one"}]`))
@@ -384,8 +382,6 @@ func TestBatchReportHandlerValidateSkipsRejectedItemInBatch(t *testing.T) {
 	l, rec := newRecordingLogger(slog.LevelInfo)
 	h := &BatchReportHandler[testReport]{
 		HandlerName: "test",
-		Logger:      l,
-		Metrics:     m,
 		Process:     passthroughProcess,
 		Validate: func(item testReport) (string, error) {
 			if item.Value == "bad" {
@@ -393,6 +389,7 @@ func TestBatchReportHandlerValidateSkipsRejectedItemInBatch(t *testing.T) {
 			}
 			return "", nil
 		},
+		Options: Options{Logger: l, Metrics: m},
 	}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"good"},{"type":"x","value":"bad"}]`))
@@ -422,12 +419,11 @@ func TestBatchReportHandlerValidateRejectsSingleObject(t *testing.T) {
 	h := &BatchReportHandler[testReport]{
 		HandlerName:  "test",
 		SingleObject: true,
-		Logger:       l,
-		Metrics:      m,
 		Process:      passthroughProcess,
 		Validate: func(item testReport) (string, error) {
 			return "some_reason", errors.New("rejected")
 		},
+		Options: Options{Logger: l, Metrics: m},
 	}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`{"type":"x","value":"one"}`))
@@ -452,7 +448,7 @@ func TestBatchReportHandlerDefaultSuccessMetric(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Metrics: m, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: m}}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"one"}]`))
 	rr := httptest.NewRecorder()
@@ -473,10 +469,9 @@ func TestBatchReportHandlerOverrideSuccessMetricTakesPrecedence(t *testing.T) {
 	var overrideCalledWith string
 	h := &BatchReportHandler[testReport]{
 		HandlerName:         "test",
-		Logger:              l,
-		Metrics:             m,
 		Process:             passthroughProcess,
 		RecordSuccessMetric: func(mode string) { overrideCalledWith = mode },
+		Options:             Options{Logger: l, Metrics: m},
 	}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"one"}]`))
@@ -499,12 +494,12 @@ func TestBatchReportHandlerSetResponseHeadersRunsBeforeMethodCheck(t *testing.T)
 	called := false
 	h := &BatchReportHandler[testReport]{
 		HandlerName: "test",
-		Logger:      l,
 		Process:     passthroughProcess,
 		SetResponseHeaders: func(w http.ResponseWriter, r *http.Request) {
 			called = true
 			w.Header().Set("X-Test-Header", "present")
 		},
+		Options: Options{Logger: l, Metrics: newTestMetrics()},
 	}
 
 	req := httptest.NewRequest("GET", "/batch", nil)
@@ -525,7 +520,7 @@ func TestBatchReportHandlerSetResponseHeadersRunsBeforeMethodCheck(t *testing.T)
 func TestBatchReportHandlerMetadata(t *testing.T) {
 	t.Run("single string", func(t *testing.T) {
 		l, buf := newTestLogger()
-		h := &BatchReportHandler[testReport]{HandlerName: "test", Logger: l, Process: passthroughProcess}
+		h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
 		req := httptest.NewRequest("POST", "/batch?metadata=env-prod", strings.NewReader(`[{"type":"x","value":"one"}]`))
 		rr := httptest.NewRecorder()
@@ -538,7 +533,7 @@ func TestBatchReportHandlerMetadata(t *testing.T) {
 
 	t.Run("object", func(t *testing.T) {
 		l, buf := newTestLogger()
-		h := &BatchReportHandler[testReport]{HandlerName: "test", MetadataObject: true, Logger: l, Process: passthroughProcess}
+		h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{MetadataObject: true, Logger: l, Metrics: newTestMetrics()}}
 
 		req := httptest.NewRequest("POST", "/batch?env=prod&team=platform", strings.NewReader(`[{"type":"x","value":"one"}]`))
 		rr := httptest.NewRecorder()
@@ -553,7 +548,7 @@ func TestBatchReportHandlerMetadata(t *testing.T) {
 
 func TestBatchReportHandlerLogClientIP(t *testing.T) {
 	l, buf := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", LogClientIP: true, Logger: l, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{ClientIP: ClientIPFull, Logger: l, Metrics: newTestMetrics()}}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"one"}]`))
 	req.RemoteAddr = "203.0.113.7:54321"
@@ -567,7 +562,7 @@ func TestBatchReportHandlerLogClientIP(t *testing.T) {
 
 func TestBatchReportHandlerLogTruncatedClientIP(t *testing.T) {
 	l, buf := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", LogTruncatedClientIP: true, Logger: l, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{ClientIP: ClientIPTruncated, Logger: l, Metrics: newTestMetrics()}}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"one"}]`))
 	req.RemoteAddr = "203.0.113.7:54321"
@@ -581,7 +576,7 @@ func TestBatchReportHandlerLogTruncatedClientIP(t *testing.T) {
 
 func TestBatchReportHandlerLogClientIPParseErrorIsNonFatal(t *testing.T) {
 	l, buf := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", LogClientIP: true, Logger: l, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{ClientIP: ClientIPFull, Logger: l, Metrics: newTestMetrics()}}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"one"}]`))
 	req.RemoteAddr = "not-a-valid-address"
@@ -598,7 +593,7 @@ func TestBatchReportHandlerLogClientIPParseErrorIsNonFatal(t *testing.T) {
 
 func TestBatchReportHandlerLogTruncatedClientIPParseErrorIsNonFatal(t *testing.T) {
 	l, buf := newTestLogger()
-	h := &BatchReportHandler[testReport]{HandlerName: "test", LogTruncatedClientIP: true, Logger: l, Process: passthroughProcess}
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{ClientIP: ClientIPTruncated, Logger: l, Metrics: newTestMetrics()}}
 
 	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"one"}]`))
 	req.RemoteAddr = "not-a-valid-address"
@@ -611,4 +606,10 @@ func TestBatchReportHandlerLogTruncatedClientIPParseErrorIsNonFatal(t *testing.T
 	if strings.Contains(buf.String(), "client_ip=") {
 		t.Errorf("expected no client_ip field when parsing fails, got: %s", buf.String())
 	}
+}
+
+// newTestMetrics returns metrics on a fresh registry, for tests that don't
+// inspect them.
+func newTestMetrics() *metrics.Metrics {
+	return metrics.New(prometheus.NewRegistry())
 }

@@ -2,11 +2,8 @@ package handler
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
-
-	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 )
 
 // COOPReport is a Cross-Origin-Opener-Policy violation delivered by the
@@ -45,15 +42,11 @@ type COOPReportBody struct {
 }
 
 // NewReportAPICOOPHandler builds the reporting-api/coop handler on BatchReportHandler.
-func NewReportAPICOOPHandler(truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *slog.Logger, m *metrics.Metrics) http.Handler {
+func NewReportAPICOOPHandler(opts Options) http.Handler {
 	return &BatchReportHandler[COOPReport]{
-		HandlerName:          "reporting_api_coop",
-		ExpectedType:         "coop",
-		MetadataObject:       metadataObject,
-		LogClientIP:          logClientIP,
-		LogTruncatedClientIP: logTruncatedClientIP,
-		Logger:               logger,
-		Metrics:              m,
+		HandlerName:  "reporting_api_coop",
+		ExpectedType: "coop",
+		Options:      opts,
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
@@ -88,7 +81,7 @@ func NewReportAPICOOPHandler(truncateQueryStringFragment, logClientIP, logTrunca
 				"path":                  r.URL.Path,
 			}
 
-			if truncateQueryStringFragment {
+			if opts.TruncateQueryStringFragment {
 				truncateURLFields(lf, "url", "previous_response_url", "next_response_url", "referrer",
 					"opener_url", "openee_url", "initial_popup_url", "other_document_url", "source_file")
 			}

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 )
 
@@ -53,9 +52,8 @@ type ProcessResult struct {
 // client IP, and metrics. Type-specific behavior is supplied via the
 // closures below.
 type BatchReportHandler[T ReportTyped] struct {
-	HandlerName    string
-	ExpectedType   string
-	MetadataObject bool
+	HandlerName  string
+	ExpectedType string
 
 	// SingleObject decodes the body as exactly one report instead of an
 	// array. CSP's report-uri delivery predates the Reporting API and the
@@ -64,11 +62,7 @@ type BatchReportHandler[T ReportTyped] struct {
 	// since there's no batch to salvage the rest of.
 	SingleObject bool
 
-	LogClientIP          bool
-	LogTruncatedClientIP bool
-
-	Logger  *slog.Logger
-	Metrics *metrics.Metrics
+	Options
 
 	// Validate runs against each type-matched report before it's processed.
 	// reason is the metric label for the rejection cause. A rejected report
@@ -115,17 +109,13 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
 	var maxErr *http.MaxBytesError
 	if errors.As(err, &maxErr) {
-		if h.Metrics != nil {
-			h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "body_too_large").Inc()
-		}
+		h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "body_too_large").Inc()
 		w.WriteHeader(http.StatusRequestEntityTooLarge)
 		h.Logger.Debug("request body exceeds the size limit", "limit_bytes", maxBodyBytes)
 		return
 	}
 	if err != nil {
-		if h.Metrics != nil {
-			h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "decode_error").Inc()
-		}
+		h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "decode_error").Inc()
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		h.Logger.Debug("unable to read request body", "error", err)
 		return
@@ -134,9 +124,7 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	items, err := h.decode(body, r)
 	if err != nil {
-		if h.Metrics != nil {
-			h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "decode_error").Inc()
-		}
+		h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "decode_error").Inc()
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		h.Logger.Debug("unable to decode invalid JSON payload", "error", err)
 		return
@@ -155,9 +143,7 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	for _, item := range items {
 		if h.ExpectedType != "" && item.ReportType() != h.ExpectedType {
-			if h.Metrics != nil {
-				h.Metrics.ReportIgnored.WithLabelValues(h.HandlerName, "unsupported_type").Inc()
-			}
+			h.Metrics.ReportIgnored.WithLabelValues(h.HandlerName, "unsupported_type").Inc()
 			continue
 		}
 
@@ -165,7 +151,7 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 			if reason, err := h.Validate(item); err != nil {
 				if h.RecordValidationErrorMetric != nil {
 					h.RecordValidationErrorMetric(reason)
-				} else if h.Metrics != nil {
+				} else {
 					h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, reason).Inc()
 				}
 				h.Logger.Debug("received invalid payload", "error", err)
@@ -179,14 +165,14 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 		result := h.Process(item, r, metadata)
 
-		if h.LogClientIP || h.LogTruncatedClientIP {
-			addClientIPField(result.Fields, r, h.LogClientIP, h.LogTruncatedClientIP, h.Logger)
+		if h.ClientIP != ClientIPNone {
+			addClientIPField(result.Fields, r, h.ClientIP, h.Logger)
 		}
 
 		h.Logger.LogAttrs(r.Context(), slog.LevelInfo, "", result.Fields.attrs()...)
 		if h.RecordSuccessMetric != nil {
 			h.RecordSuccessMetric(result.Mode)
-		} else if h.Metrics != nil {
+		} else {
 			h.Metrics.Reports.WithLabelValues(h.HandlerName, result.Mode).Inc()
 		}
 	}
@@ -215,9 +201,7 @@ func (h *BatchReportHandler[T]) decode(body []byte, r *http.Request) ([]T, error
 	for _, raw := range rawItems {
 		var item T
 		if err := json.Unmarshal(raw, &item); err != nil {
-			if h.Metrics != nil {
-				h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "item_decode_error").Inc()
-			}
+			h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "item_decode_error").Inc()
 			h.Logger.Debug("skipping a report that couldn't be decoded",
 				"reason", "item_decode_error",
 				"body", string(raw),
@@ -240,22 +224,15 @@ func truncateURLFields(fields Fields, keys ...string) {
 	}
 }
 
-func addClientIPField(fields Fields, r *http.Request, logFull, logTruncated bool, logger *slog.Logger) {
-	if logFull {
-		ip, err := utils.GetClientIP(r)
-		if err != nil {
-			logger.Warn("unable to parse client ip", "error", err)
-		} else {
-			fields["client_ip"] = ip.String()
-		}
+func addClientIPField(fields Fields, r *http.Request, mode ClientIPMode, logger *slog.Logger) {
+	ip, err := utils.GetClientIP(r)
+	if err != nil {
+		logger.Warn("unable to parse client ip", "error", err)
+		return
 	}
-
-	if logTruncated {
-		ip, err := utils.GetClientIP(r)
-		if err != nil {
-			logger.Warn("unable to parse client ip", "error", err)
-		} else {
-			fields["client_ip"] = utils.TruncateClientIP(ip)
-		}
+	if mode == ClientIPTruncated {
+		fields["client_ip"] = utils.TruncateClientIP(ip)
+	} else {
+		fields["client_ip"] = ip.String()
 	}
 }

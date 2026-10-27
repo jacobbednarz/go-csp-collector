@@ -71,7 +71,7 @@ func TestReportAPICOEPHandlerLogsReport(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			l, rec := newRecordingLogger(slog.LevelInfo)
-			h := NewReportAPICOEPHandler(tt.truncate, false, false, false, l, nil)
+			h := NewReportAPICOEPHandler(Options{TruncateQueryStringFragment: tt.truncate, Logger: l, Metrics: newTestMetrics()})
 
 			rr := httptest.NewRecorder()
 			h.ServeHTTP(rr, httptest.NewRequest("POST", "/reporting-api/coep", strings.NewReader(tt.body)))
@@ -94,7 +94,7 @@ func TestReportAPICOEPHandlerMetrics(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
-	h := NewReportAPICOEPHandler(false, false, false, false, l, m)
+	h := NewReportAPICOEPHandler(Options{Logger: l, Metrics: m})
 
 	body := `[
 		{"type":"coep","url":"https://example.com/","body":{"type":"corp","disposition":"enforce"}},
@@ -126,7 +126,7 @@ func TestReportAPICOEPHandlerMetrics(t *testing.T) {
 
 func TestReportAPICOEPHandlerSetsCORSHeaderOnResponse(t *testing.T) {
 	l, _ := newTestLogger()
-	h := NewReportAPICOEPHandler(false, false, false, false, l, nil)
+	h := NewReportAPICOEPHandler(Options{Logger: l, Metrics: newTestMetrics()})
 
 	req := httptest.NewRequest("POST", "/reporting-api/coep", strings.NewReader("[]"))
 	req.Header.Set("Origin", "https://example.com")

@@ -2,11 +2,9 @@ package handler
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 
-	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 )
 
@@ -36,15 +34,11 @@ type NELReportBody struct {
 }
 
 // NewNELHandler builds a NEL report handler on BatchReportHandler.
-func NewNELHandler(reportOnly, truncateQueryStringFragment, logClientIP, logTruncatedClientIP, metadataObject bool, logger *slog.Logger, m *metrics.Metrics) http.Handler {
+func NewNELHandler(reportOnly bool, opts Options) http.Handler {
 	return &BatchReportHandler[NELReport]{
-		HandlerName:          "nel",
-		ExpectedType:         "network-error",
-		MetadataObject:       metadataObject,
-		LogClientIP:          logClientIP,
-		LogTruncatedClientIP: logTruncatedClientIP,
-		Logger:               logger,
-		Metrics:              m,
+		HandlerName:  "nel",
+		ExpectedType: "network-error",
+		Options:      opts,
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
@@ -58,21 +52,17 @@ func NewNELHandler(reportOnly, truncateQueryStringFragment, logClientIP, logTrun
 		// NEL also counts in its own nel_reports_total, which is deprecated
 		// and kept until dashboards have moved to reports_total.
 		RecordSuccessMetric: func(mode string) {
-			if m != nil {
-				m.Reports.WithLabelValues("nel", mode).Inc()
-				m.NELReports.WithLabelValues(mode).Inc()
-			}
+			opts.Metrics.Reports.WithLabelValues("nel", mode).Inc()
+			opts.Metrics.NELReports.WithLabelValues(mode).Inc()
 		},
 		RecordValidationErrorMetric: func(reason string) {
-			if m != nil {
-				m.ReportErrors.WithLabelValues("nel", reason).Inc()
-			}
+			opts.Metrics.ReportErrors.WithLabelValues("nel", reason).Inc()
 		},
 
 		Process: func(report NELReport, r *http.Request, metadata interface{}) ProcessResult {
 			url := report.URL
 			referrer := report.Body.Referrer
-			if truncateQueryStringFragment {
+			if opts.TruncateQueryStringFragment {
 				url = utils.TruncateQueryStringFragment(url)
 				referrer = utils.TruncateQueryStringFragment(referrer)
 			}
