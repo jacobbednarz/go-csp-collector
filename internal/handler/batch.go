@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-
-	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 )
 
 // maxBodyBytes caps how much of a request body is read. Chrome queues at most
@@ -264,12 +262,20 @@ func expectEOF(dec *json.Decoder) error {
 	return fmt.Errorf("unexpected %v after the report", tok)
 }
 
+// truncateQueryStringFragment strips everything from the first ? or #.
+func truncateQueryStringFragment(uri string) string {
+	if i := strings.IndexAny(uri, "#?"); i != -1 {
+		return uri[:i]
+	}
+	return uri
+}
+
 // truncateURLFields strips the query string and fragment from each named
 // field, for --truncate-query-fragment.
 func truncateURLFields(fields Fields, keys ...string) {
 	for _, k := range keys {
 		if v, ok := fields[k].(string); ok {
-			fields[k] = utils.TruncateQueryStringFragment(v)
+			fields[k] = truncateQueryStringFragment(v)
 		}
 	}
 }
@@ -299,13 +305,13 @@ func (h *BatchReportHandler[T]) clientIP(r *http.Request) string {
 	if h.ClientIP == ClientIPNone {
 		return ""
 	}
-	ip, err := utils.GetClientIP(r)
+	ip, err := requestClientIP(r)
 	if err != nil {
 		h.Logger.Warn("unable to parse client ip", "error", err)
 		return ""
 	}
 	if h.ClientIP == ClientIPTruncated {
-		return utils.TruncateClientIP(ip)
+		return truncateClientIP(ip)
 	}
 	return ip.String()
 }

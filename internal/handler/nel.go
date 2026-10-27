@@ -2,8 +2,6 @@ package handler
 
 import (
 	"net/http"
-
-	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 )
 
 // NELReport is the structure of a single NEL report as delivered by the
@@ -52,29 +50,25 @@ func NewNELHandler(reportOnly bool, opts Options) http.Handler {
 		},
 
 		Process: func(report NELReport) ProcessResult {
-			url := report.URL
-			referrer := report.Body.Referrer
-			if opts.TruncateQueryStringFragment {
-				url = utils.TruncateQueryStringFragment(url)
-				referrer = utils.TruncateQueryStringFragment(referrer)
+			lf := Fields{
+				"report_only":       reportOnly,
+				"url":               report.URL,
+				"referrer":          report.Body.Referrer,
+				"type":              report.Body.Type,
+				"phase":             report.Body.Phase,
+				"protocol":          report.Body.Protocol,
+				"method":            report.Body.Method,
+				"status_code":       report.Body.StatusCode,
+				"elapsed_time":      report.Body.ElapsedTime,
+				"server_ip":         report.Body.ServerIP,
+				"sampling_fraction": report.Body.SamplingFraction,
 			}
 
-			return ProcessResult{
-				Fields: Fields{
-					"report_only":       reportOnly,
-					"url":               url,
-					"referrer":          referrer,
-					"type":              report.Body.Type,
-					"phase":             report.Body.Phase,
-					"protocol":          report.Body.Protocol,
-					"method":            report.Body.Method,
-					"status_code":       report.Body.StatusCode,
-					"elapsed_time":      report.Body.ElapsedTime,
-					"server_ip":         report.Body.ServerIP,
-					"sampling_fraction": report.Body.SamplingFraction,
-				},
-				Mode: modeLabel(reportOnly),
+			if opts.TruncateQueryStringFragment {
+				truncateURLFields(lf, "url", "referrer")
 			}
+
+			return ProcessResult{Fields: lf, Mode: modeLabel(reportOnly)}
 		},
 	}
 }
