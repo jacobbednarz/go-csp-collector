@@ -46,55 +46,89 @@ var (
 )
 
 func main() {
-	version := flag.Bool("version", false, "Display the version")
-	debugFlag := flag.Bool("debug", false, "Output additional logging for debugging")
-	outputFormat := flag.String("output-format", "text", "Define how the violation reports are formatted for output.\nDefaults to 'text'. Valid options are 'text' or 'json'")
-	blockedURIFile := flag.String("filter-file", "", "Blocked URI filter file (one prefix per line)")
-	blockedDomainFile := flag.String("filter-domains-file", "", "Blocked domain filter file (one domain per line; blocks exact matches and all subdomains)")
-	listenPort := flag.Int("port", 8080, "Port to listen on")
-	metricsPort := flag.Int("metrics-port", 9090, "Port for the Prometheus metrics endpoint")
-	metricsBindAddr := flag.String("metrics-bind-addr", "127.0.0.1", "Bind address for the Prometheus metrics endpoint")
-	healthCheckPath := flag.String("health-check-path", defaultHealthCheckPath, "Health checker path")
-	truncateQueryStringFragment := flag.Bool("truncate-query-fragment", false, "Truncate query string and fragment from document-uri, referrer and blocked-uri before logging (to reduce chances of accidentally logging sensitive data)")
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	err := run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	stop()
+	os.Exit(exitCode(err))
+}
 
-	logClientIP := flag.Bool("log-client-ip", false, "Log the reporting client IP address")
-	logTruncatedClientIP := flag.Bool("log-truncated-client-ip", false, "Log the truncated client IP address (IPv4: /24, IPv6: /64")
+// errUsage wraps a flag that couldn't be parsed.
+var errUsage = errors.New("invalid usage")
 
-	metadataObject := flag.Bool("query-params-metadata", false, "Write query parameters of the report URI as JSON object under metadata instead of the single metadata string")
+// exitCode follows the flag package's convention of 2 for a usage error.
+func exitCode(err error) int {
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, errUsage):
+		return 2
+	default:
+		return 1
+	}
+}
 
-	endpoints := flag.String("endpoints", strings.Join(endpointGroups, ","), "Comma separated list of endpoint groups to serve: "+strings.Join(endpointGroups, ", "))
+// run is the collector, kept out of main so startup can be tested. It
+// serves until ctx is cancelled. Any error it returns has already been
+// written to stderr.
+func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("csp_collector", flag.ContinueOnError)
+	fs.SetOutput(stderr)
 
-	flag.Parse()
+	version := fs.Bool("version", false, "Display the version")
+	debugFlag := fs.Bool("debug", false, "Output additional logging for debugging")
+	outputFormat := fs.String("output-format", "text", "Define how the violation reports are formatted for output.\nDefaults to 'text'. Valid options are 'text' or 'json'")
+	blockedURIFile := fs.String("filter-file", "", "Blocked URI filter file (one prefix per line)")
+	blockedDomainFile := fs.String("filter-domains-file", "", "Blocked domain filter file (one domain per line; blocks exact matches and all subdomains)")
+	listenPort := fs.Int("port", 8080, "Port to listen on")
+	metricsPort := fs.Int("metrics-port", 9090, "Port for the Prometheus metrics endpoint")
+	metricsBindAddr := fs.String("metrics-bind-addr", "127.0.0.1", "Bind address for the Prometheus metrics endpoint")
+	healthCheckPath := fs.String("health-check-path", defaultHealthCheckPath, "Health checker path")
+	truncateQueryStringFragment := fs.Bool("truncate-query-fragment", false, "Truncate query string and fragment from document-uri, referrer and blocked-uri before logging (to reduce chances of accidentally logging sensitive data)")
+
+	logClientIP := fs.Bool("log-client-ip", false, "Log the reporting client IP address")
+	logTruncatedClientIP := fs.Bool("log-truncated-client-ip", false, "Log the truncated client IP address (IPv4: /24, IPv6: /64")
+
+	metadataObject := fs.Bool("query-params-metadata", false, "Write query parameters of the report URI as JSON object under metadata instead of the single metadata string")
+
+	endpoints := fs.String("endpoints", strings.Join(endpointGroups, ","), "Comma separated list of endpoint groups to serve: "+strings.Join(endpointGroups, ", "))
+
+	// The flag package has already printed the problem and the usage.
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return fmt.Errorf("%w: %w", errUsage, err)
+	}
 
 	if *version {
-		fmt.Printf("csp-collector (%s)\n", Rev)
-		os.Exit(0)
+		_, err := fmt.Fprintf(stdout, "csp-collector (%s)\n", Rev)
+		return err
 	}
 
 	level := slog.LevelInfo
 	if *debugFlag {
 		level = slog.LevelDebug
 	}
-	logger := slog.New(newLogHandler(os.Stdout, *outputFormat, level))
+	logger := slog.New(newLogHandler(stdout, *outputFormat, level))
 
 	// Errors go to stderr so they stay visible when stdout, the reports,
 	// is redirected to a file.
-	errLogger := slog.New(newLogHandler(os.Stderr, *outputFormat, level))
-	fatal := func(msg string, args ...any) {
+	errLogger := slog.New(newLogHandler(stderr, *outputFormat, level))
+	fail := func(msg string, args ...any) error {
 		errLogger.Error(msg, args...)
-		os.Exit(1)
+		return errors.New(msg)
 	}
 
 	// Flag parsing stops at the first argument that isn't a flag, so
 	// anything after it would be silently ignored. The image's entrypoint
 	// is the binary, so an old `/csp_collector --flag` command lands here.
-	if flag.NArg() > 0 {
-		fatal("unexpected argument, only flags are accepted", "argument", flag.Arg(0))
+	if fs.NArg() > 0 {
+		return fail("unexpected argument, only flags are accepted", "argument", fs.Arg(0))
 	}
 
 	// Both write the same client_ip field, so one would silently win.
 	if *logClientIP && *logTruncatedClientIP {
-		fatal("--log-client-ip and --log-truncated-client-ip can't be combined, pick one")
+		return fail("--log-client-ip and --log-truncated-client-ip can't be combined, pick one")
 	}
 
 	logger.Debug("starting up")
@@ -104,7 +138,7 @@ func main() {
 
 		content, err := os.ReadFile(*blockedURIFile)
 		if err != nil {
-			fatal("unable to read filter list", "path", *blockedURIFile, "error", err)
+			return fail("unable to read filter list", "path", *blockedURIFile, "error", err)
 		}
 		ignoredBlockedURIs = utils.ParseFilterList(string(content))
 	} else {
@@ -117,7 +151,7 @@ func main() {
 
 		content, err := os.ReadFile(*blockedDomainFile)
 		if err != nil {
-			fatal("unable to read domain filter list", "path", *blockedDomainFile, "error", err)
+			return fail("unable to read domain filter list", "path", *blockedDomainFile, "error", err)
 		}
 		blockedDomains = utils.ParseFilterList(string(content))
 	}
@@ -125,12 +159,12 @@ func main() {
 	// The path becomes part of a ServeMux pattern, where braces are
 	// wildcards and a missing leading slash is a panic.
 	if !strings.HasPrefix(*healthCheckPath, "/") || strings.ContainsAny(*healthCheckPath, "{} \t") {
-		fatal("invalid --health-check-path, it must start with / and can't contain spaces or braces", "path", *healthCheckPath)
+		return fail("invalid --health-check-path, it must start with / and can't contain spaces or braces", "path", *healthCheckPath)
 	}
 
 	enabledEndpoints, err := parseEndpoints(*endpoints)
 	if err != nil {
-		fatal("invalid --endpoints value", "error", err)
+		return fail("invalid --endpoints value", "error", err)
 	}
 
 	clientIP := handler.ClientIPNone
@@ -167,36 +201,35 @@ func main() {
 	// at startup instead of from inside a goroutine.
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", *listenPort))
 	if err != nil {
-		fatal("unable to listen for reports", "error", err)
+		return fail("unable to listen for reports", "error", err)
 	}
 	metricsLn, err := net.Listen("tcp", fmt.Sprintf("%s:%d", *metricsBindAddr, *metricsPort))
 	if err != nil {
-		fatal("unable to listen for metrics", "error", err)
+		_ = ln.Close()
+		return fail("unable to listen for metrics", "error", err)
 	}
 
 	metricsMux := http.NewServeMux()
 	metricsMux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	// Either server failing stops the other, so the collector exits rather
+	// than carrying on with only one of its listeners.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	errs := make(chan error, 2)
 	go func() { errs <- serve(ctx, newServer(metricsMux), metricsLn) }()
 	go func() { errs <- serve(ctx, newServer(r), ln) }()
 
-	// Either server failing stops the other, so the process exits rather
-	// than carrying on with only one of its listeners.
-	failed := false
+	var failed error
 	for range 2 {
 		if err := <-errs; err != nil {
 			errLogger.Error("server stopped", "error", err)
-			failed = true
-			stop()
+			failed = errors.Join(failed, err)
+			cancel()
 		}
 	}
-	if failed {
-		os.Exit(1)
-	}
+	return failed
 }
 
 // newLogHandler writes logs in the given format with the timestamp, level
