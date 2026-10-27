@@ -42,7 +42,7 @@ var (
 	//go:embed sample.filterlist.txt
 	defaultFilterList string
 
-	defaultBlockedURIs = utils.TrimEmptyAndComments(strings.Split(defaultFilterList, "\n"))
+	defaultBlockedURIs = utils.ParseFilterList(defaultFilterList)
 )
 
 func main() {
@@ -106,7 +106,7 @@ func main() {
 		if err != nil {
 			fatal("unable to read filter list", "path", *blockedURIFile, "error", err)
 		}
-		ignoredBlockedURIs = utils.TrimEmptyAndComments(strings.Split(string(content), "\n"))
+		ignoredBlockedURIs = utils.ParseFilterList(string(content))
 	} else {
 		logger.Debug("using the built-in filter list")
 	}
@@ -119,7 +119,7 @@ func main() {
 		if err != nil {
 			fatal("unable to read domain filter list", "path", *blockedDomainFile, "error", err)
 		}
-		blockedDomains = utils.TrimEmptyAndComments(strings.Split(string(content), "\n"))
+		blockedDomains = utils.ParseFilterList(string(content))
 	}
 
 	// The path becomes part of a ServeMux pattern, where braces are
