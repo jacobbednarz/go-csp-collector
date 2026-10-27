@@ -1,4 +1,5 @@
 build/
 dist/
-csp_collector
+/csp_collector
+/go-csp-collector
 .idea
