@@ -285,18 +285,51 @@ func parseFilterList(content string) []string {
 	return entries
 }
 
-// buildVersion is the version --version prints. Release builds set rev
-// at link time. A `go install` build doesn't, but Go records the module
-// version it installed, so that's used instead. Local builds report
-// "(devel)" there, which says less than "dev".
+// buildVersion is the version --version prints, in the release format of
+// the tag without its "v", then "+" and the short commit: 0.0.27+abc1234.
+//
+// Release builds set rev at link time. A `go install` build doesn't, so
+// the version comes from what Go records in the binary instead:
+//
+//	v0.0.27                                   tagged install, no commit recorded
+//	v0.0.27-0.20261027021924-2d5b9b2bb20c     pseudo-version of a commit
+//	v0.0.27-0.20261027021924-2d5b9b2bb20c+dirty  local build with changes
+//
+// A local build that Go couldn't stamp reports "(devel)", which says less
+// than "dev".
 func buildVersion(rev string, info *debug.BuildInfo) string {
 	if rev != "dev" || info == nil {
 		return rev
 	}
-	if v := info.Main.Version; v != "" && v != "(devel)" {
-		return v
+	v, dirty := strings.CutSuffix(strings.TrimPrefix(info.Main.Version, "v"), "+dirty")
+	if v == "" || v == "(devel)" {
+		return rev
 	}
-	return rev
+
+	if i := strings.LastIndexByte(v, '-'); i != -1 && isCommitHash(v[i+1:]) {
+		v = v[:i] + "+" + v[i+1:i+8]
+	}
+	if dirty {
+		if strings.Contains(v, "+") {
+			return v + "-dirty"
+		}
+		return v + "+dirty"
+	}
+	return v
+}
+
+// isCommitHash reports whether s is the 12 character commit prefix that
+// ends a pseudo-version.
+func isCommitHash(s string) bool {
+	if len(s) != 12 {
+		return false
+	}
+	for _, c := range s {
+		if !strings.ContainsRune("0123456789abcdef", c) {
+			return false
+		}
+	}
+	return true
 }
 
 // parseDomainList parses a domain filter file. Hostnames are

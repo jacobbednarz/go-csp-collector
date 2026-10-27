@@ -612,8 +612,16 @@ func TestBuildVersion(t *testing.T) {
 		want string
 	}{
 		{name: "release_build", rev: "0.0.27+c043a85", info: &debug.BuildInfo{Main: debug.Module{Version: "v0.0.27"}}, want: "0.0.27+c043a85"},
-		{name: "go_install", rev: "dev", info: &debug.BuildInfo{Main: debug.Module{Version: "v0.0.27"}}, want: "v0.0.27"},
-		{name: "go_install_pseudo_version", rev: "dev", info: &debug.BuildInfo{Main: debug.Module{Version: "v0.0.28-0.20261027010203-c043a85d5326"}}, want: "v0.0.28-0.20261027010203-c043a85d5326"},
+		// A tagged install is built from a module zip, which records the
+		// version but not the commit.
+		{name: "go_install_tag", rev: "dev", info: &debug.BuildInfo{Main: debug.Module{Version: "v0.0.27"}}, want: "0.0.27"},
+		{name: "go_install_prerelease_tag", rev: "dev", info: &debug.BuildInfo{Main: debug.Module{Version: "v0.1.0-rc.1"}}, want: "0.1.0-rc.1"},
+		// A pseudo-version ends in the 12 character commit, which becomes
+		// the short commit releases use.
+		{name: "go_install_commit", rev: "dev", info: &debug.BuildInfo{Main: debug.Module{Version: "v0.0.27-0.20261027021924-2d5b9b2bb20c"}}, want: "0.0.27-0.20261027021924+2d5b9b2"},
+		{name: "go_install_commit_before_any_tag", rev: "dev", info: &debug.BuildInfo{Main: debug.Module{Version: "v0.0.0-20261027021924-2d5b9b2bb20c"}}, want: "0.0.0-20261027021924+2d5b9b2"},
+		{name: "local_build_of_tag_with_changes", rev: "dev", info: &debug.BuildInfo{Main: debug.Module{Version: "v0.0.27+dirty"}}, want: "0.0.27+dirty"},
+		{name: "local_build_with_changes", rev: "dev", info: &debug.BuildInfo{Main: debug.Module{Version: "v0.0.27-0.20261027021924-2d5b9b2bb20c+dirty"}}, want: "0.0.27-0.20261027021924+2d5b9b2-dirty"},
 		{name: "local_build", rev: "dev", info: &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, want: "dev"},
 		{name: "no_module_version", rev: "dev", info: &debug.BuildInfo{}, want: "dev"},
 		{name: "no_build_info", rev: "dev", info: nil, want: "dev"},
