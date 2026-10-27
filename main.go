@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"syscall"
@@ -100,7 +101,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 
 	if *version {
-		_, err := fmt.Fprintf(stdout, "csp-collector (%s)\n", Rev)
+		info, _ := debug.ReadBuildInfo()
+		_, err := fmt.Fprintf(stdout, "csp-collector (%s)\n", buildVersion(Rev, info))
 		return err
 	}
 
@@ -281,6 +283,20 @@ func parseFilterList(content string) []string {
 		entries = append(entries, line)
 	}
 	return entries
+}
+
+// buildVersion is the version --version prints. Release builds set rev
+// at link time. A `go install` build doesn't, but Go records the module
+// version it installed, so that's used instead. Local builds report
+// "(devel)" there, which says less than "dev".
+func buildVersion(rev string, info *debug.BuildInfo) string {
+	if rev != "dev" || info == nil {
+		return rev
+	}
+	if v := info.Main.Version; v != "" && v != "(devel)" {
+		return v
+	}
+	return rev
 }
 
 // parseDomainList parses a domain filter file. Hostnames are
