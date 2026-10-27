@@ -22,14 +22,7 @@ func TestFilterListProcessing(t *testing.T) {
 	// Discard the output we create from the calls here.
 	log.SetOutput(io.Discard)
 
-	blockList := []string{
-		"resource://",
-		"",
-		"# comment",
-		"chrome-extension://",
-		"",
-	}
-	trimmed := utils.TrimEmptyAndComments(blockList)
+	trimmed := utils.ParseFilterList("resource://\n\n# comment\nchrome-extension://\n")
 
 	if len(trimmed) != 2 {
 		t.Errorf("expected filter list length 2; got %v", len(trimmed))
@@ -45,7 +38,7 @@ func TestFilterListProcessing(t *testing.T) {
 // Filter files saved on Windows, or checked out with CRLF line endings, would
 // otherwise leave a trailing \r on every entry so none of them match.
 func TestFilterListProcessingTrimsWhitespace(t *testing.T) {
-	got := utils.TrimEmptyAndComments(strings.Split("# comment\r\nchrome-extension\r\n  \r\n moz-extension \r\n", "\n"))
+	got := utils.ParseFilterList("# comment\r\nchrome-extension\r\n  \r\n moz-extension \r\n")
 	want := []string{"chrome-extension", "moz-extension"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %q, want %q", got, want)
