@@ -31,6 +31,8 @@ func passthroughProcess(report testReport) ProcessResult {
 }
 
 func TestBatchReportHandlerDisallowedMethod(t *testing.T) {
+	t.Parallel()
+
 	l, _ := newTestLogger()
 	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
@@ -44,6 +46,8 @@ func TestBatchReportHandlerDisallowedMethod(t *testing.T) {
 }
 
 func TestBatchReportHandlerDecodesArray(t *testing.T) {
+	t.Parallel()
+
 	l, buf := newTestLogger()
 	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
@@ -60,6 +64,8 @@ func TestBatchReportHandlerDecodesArray(t *testing.T) {
 }
 
 func TestBatchReportHandlerEmptyArrayIsNoOp(t *testing.T) {
+	t.Parallel()
+
 	l, buf := newTestLogger()
 	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
@@ -76,6 +82,8 @@ func TestBatchReportHandlerEmptyArrayIsNoOp(t *testing.T) {
 }
 
 func TestBatchReportHandlerSingleObjectRejectedByDefault(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -94,6 +102,8 @@ func TestBatchReportHandlerSingleObjectRejectedByDefault(t *testing.T) {
 }
 
 func TestBatchReportHandlerSingleObjectAccepted(t *testing.T) {
+	t.Parallel()
+
 	l, buf := newTestLogger()
 	h := &BatchReportHandler[testReport]{HandlerName: "test", SingleObject: true, Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
@@ -110,6 +120,8 @@ func TestBatchReportHandlerSingleObjectAccepted(t *testing.T) {
 }
 
 func TestBatchReportHandlerSingleObjectRejectsOtherBodies(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		body string
@@ -121,6 +133,8 @@ func TestBatchReportHandlerSingleObjectRejectsOtherBodies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			registry := prometheus.NewRegistry()
 			m := metrics.New(registry)
 			l, buf := newTestLogger()
@@ -147,6 +161,8 @@ func TestBatchReportHandlerSingleObjectRejectsOtherBodies(t *testing.T) {
 }
 
 func TestBatchReportHandlerBodyReadError(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -167,6 +183,8 @@ func TestBatchReportHandlerBodyReadError(t *testing.T) {
 // The report endpoints have to be public, so a body over the limit is
 // rejected without being read into memory, and nothing in it is logged.
 func TestBatchReportHandlerBodyTooLarge(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, buf := newTestLoggerAtLevel(slog.LevelDebug)
@@ -191,6 +209,8 @@ func TestBatchReportHandlerBodyTooLarge(t *testing.T) {
 }
 
 func TestBatchReportHandlerBodyAtLimitIsAccepted(t *testing.T) {
+	t.Parallel()
+
 	l, _ := newTestLogger()
 	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
@@ -209,6 +229,8 @@ type errReader struct{}
 func (errReader) Read(p []byte) (int, error) { return 0, errors.New("simulated read failure") }
 
 func TestBatchReportHandlerItemDecodeErrorSkipsAndContinues(t *testing.T) {
+	t.Parallel()
+
 	l, buf := newTestLoggerAtLevel(slog.LevelDebug)
 	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
@@ -231,6 +253,8 @@ func TestBatchReportHandlerItemDecodeErrorSkipsAndContinues(t *testing.T) {
 // Malformed items are usually garbage or hostile, so logging them must be
 // an explicit opt-in via debug level rather than noise at the default level.
 func TestBatchReportHandlerItemDecodeErrorLogLevel(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		level       slog.Level
@@ -258,6 +282,8 @@ func TestBatchReportHandlerItemDecodeErrorLogLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			l, rec := newRecordingLogger(tt.level)
 			h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
@@ -276,6 +302,8 @@ func TestBatchReportHandlerItemDecodeErrorLogLevel(t *testing.T) {
 }
 
 func TestBatchReportHandlerItemDecodeErrorMetric(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -294,6 +322,8 @@ func TestBatchReportHandlerItemDecodeErrorMetric(t *testing.T) {
 }
 
 func TestBatchReportHandlerExpectedTypeSkipsAndIncrementsIgnored(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, buf := newTestLogger()
@@ -315,6 +345,8 @@ func TestBatchReportHandlerExpectedTypeSkipsAndIncrementsIgnored(t *testing.T) {
 }
 
 func TestBatchReportHandlerValidateRejectedCountsAsError(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -340,6 +372,8 @@ func TestBatchReportHandlerValidateRejectedCountsAsError(t *testing.T) {
 }
 
 func TestBatchReportHandlerValidateFilteredCountsAsFiltered(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -372,6 +406,8 @@ func TestBatchReportHandlerValidateFilteredCountsAsFiltered(t *testing.T) {
 // report in the batch and backs off the endpoint, so one filtered report
 // must not take the well-formed ones down with it.
 func TestBatchReportHandlerValidateSkipsRejectedItemInBatch(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, rec := newRecordingLogger(slog.LevelInfo)
@@ -408,6 +444,8 @@ func TestBatchReportHandlerValidateSkipsRejectedItemInBatch(t *testing.T) {
 }
 
 func TestBatchReportHandlerValidateRejectsSingleObject(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, buf := newTestLogger()
@@ -440,6 +478,8 @@ func TestBatchReportHandlerValidateRejectsSingleObject(t *testing.T) {
 }
 
 func TestBatchReportHandlerDefaultSuccessMetric(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -458,6 +498,8 @@ func TestBatchReportHandlerDefaultSuccessMetric(t *testing.T) {
 }
 
 func TestBatchReportHandlerOverrideSuccessMetricTakesPrecedence(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -485,6 +527,8 @@ func TestBatchReportHandlerOverrideSuccessMetricTakesPrecedence(t *testing.T) {
 }
 
 func TestBatchReportHandlerSetResponseHeadersRunsBeforeMethodCheck(t *testing.T) {
+	t.Parallel()
+
 	l, _ := newTestLogger()
 	called := false
 	h := &BatchReportHandler[testReport]{
@@ -513,7 +557,11 @@ func TestBatchReportHandlerSetResponseHeadersRunsBeforeMethodCheck(t *testing.T)
 }
 
 func TestBatchReportHandlerMetadata(t *testing.T) {
+	t.Parallel()
+
 	t.Run("single string", func(t *testing.T) {
+		t.Parallel()
+
 		l, buf := newTestLogger()
 		h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: l, Metrics: newTestMetrics()}}
 
@@ -527,6 +575,8 @@ func TestBatchReportHandlerMetadata(t *testing.T) {
 	})
 
 	t.Run("object", func(t *testing.T) {
+		t.Parallel()
+
 		l, buf := newTestLogger()
 		h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{MetadataObject: true, Logger: l, Metrics: newTestMetrics()}}
 
@@ -542,6 +592,8 @@ func TestBatchReportHandlerMetadata(t *testing.T) {
 }
 
 func TestBatchReportHandlerLogClientIP(t *testing.T) {
+	t.Parallel()
+
 	l, buf := newTestLogger()
 	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{ClientIP: ClientIPFull, Logger: l, Metrics: newTestMetrics()}}
 
@@ -556,6 +608,8 @@ func TestBatchReportHandlerLogClientIP(t *testing.T) {
 }
 
 func TestBatchReportHandlerLogTruncatedClientIP(t *testing.T) {
+	t.Parallel()
+
 	l, buf := newTestLogger()
 	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{ClientIP: ClientIPTruncated, Logger: l, Metrics: newTestMetrics()}}
 
@@ -570,6 +624,8 @@ func TestBatchReportHandlerLogTruncatedClientIP(t *testing.T) {
 }
 
 func TestBatchReportHandlerLogClientIPParseErrorIsNonFatal(t *testing.T) {
+	t.Parallel()
+
 	l, buf := newTestLogger()
 	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{ClientIP: ClientIPFull, Logger: l, Metrics: newTestMetrics()}}
 
@@ -587,6 +643,8 @@ func TestBatchReportHandlerLogClientIPParseErrorIsNonFatal(t *testing.T) {
 }
 
 func TestBatchReportHandlerLogTruncatedClientIPParseErrorIsNonFatal(t *testing.T) {
+	t.Parallel()
+
 	l, buf := newTestLogger()
 	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{ClientIP: ClientIPTruncated, Logger: l, Metrics: newTestMetrics()}}
 
@@ -612,6 +670,8 @@ func newTestMetrics() *metrics.Metrics {
 // The address belongs to the request, so a batch from an address that
 // can't be parsed warns once rather than once for every report in it.
 func TestBatchReportHandlerClientIPParseErrorWarnsOncePerRequest(t *testing.T) {
+	t.Parallel()
+
 	l, rec := newRecordingLogger(slog.LevelInfo)
 	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{ClientIP: ClientIPFull, Logger: l, Metrics: newTestMetrics()}}
 
@@ -680,6 +740,8 @@ func BenchmarkBatchReportHandlerFullBatch(b *testing.B) {
 // breaks partway through logs nothing rather than the reports before the
 // break. A browser retries a failed upload, which would log them twice.
 func TestBatchReportHandlerMalformedBodyLogsNothing(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		singleObject bool
@@ -699,6 +761,8 @@ func TestBatchReportHandlerMalformedBodyLogsNothing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			registry := prometheus.NewRegistry()
 			m := metrics.New(registry)
 			l, rec := newRecordingLogger(slog.LevelInfo)
@@ -721,6 +785,8 @@ func TestBatchReportHandlerMalformedBodyLogsNothing(t *testing.T) {
 }
 
 func TestTruncateQueryStringFragment(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		uri  string
@@ -735,6 +801,8 @@ func TestTruncateQueryStringFragment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			if got := truncateQueryStringFragment(tt.uri); got != tt.want {
 				t.Errorf("truncateQueryStringFragment(%q) = %q, want %q", tt.uri, got, tt.want)
 			}

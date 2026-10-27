@@ -7,6 +7,8 @@ import (
 )
 
 func TestRequestClientIP(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		remoteAddr   string
@@ -28,6 +30,8 @@ func TestRequestClientIP(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			r := httptest.NewRequest("POST", "/", nil)
 			r.RemoteAddr = tt.remoteAddr
 			if tt.forwardedFor != "" {
@@ -52,6 +56,8 @@ func TestRequestClientIP(t *testing.T) {
 }
 
 func TestTruncateClientIP(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		addr netip.Addr
@@ -64,6 +70,8 @@ func TestTruncateClientIP(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			if got := truncateClientIP(tt.addr); got != tt.want {
 				t.Errorf("truncateClientIP(%v) = %q, want %q", tt.addr, got, tt.want)
 			}

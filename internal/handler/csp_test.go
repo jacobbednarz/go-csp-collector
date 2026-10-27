@@ -52,17 +52,23 @@ func newTestCSPHandler(blockedURIs, blockedDomains []string, l *slog.Logger, m *
 }
 
 func TestCSPReportType(t *testing.T) {
+	t.Parallel()
+
 	if got := (CSPReport{}).ReportType(); got != "csp-violation" {
 		t.Errorf("expected ReportType() to return %q, got %q", "csp-violation", got)
 	}
 }
 
 func TestGenericCSPHandlerInvalidBlockedURIs(t *testing.T) {
+	t.Parallel()
+
 	for _, blockedURI := range invalidBlockedURIs {
 		// Makes the test name more readable for the output.
 		testName := strings.ReplaceAll(blockedURI, "://", "")
 
 		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+
 			rawReport := []byte(fmt.Sprintf(`{
 				"csp-report": {
 					"document-uri": "https://example.com",
@@ -90,6 +96,8 @@ func TestGenericCSPHandlerInvalidBlockedURIs(t *testing.T) {
 }
 
 func TestGenericCSPHandlerValidBlockedURIs(t *testing.T) {
+	t.Parallel()
+
 	rawReport := []byte(`{
 		"csp-report": {
 			"document-uri": "https://example.com",
@@ -110,6 +118,8 @@ func TestGenericCSPHandlerValidBlockedURIs(t *testing.T) {
 }
 
 func TestGenericCSPHandlerNonHttpDocumentURI(t *testing.T) {
+	t.Parallel()
+
 	rawReport := []byte(`{
 		"csp-report": {
 			"document-uri": "about",
@@ -133,6 +143,8 @@ func TestGenericCSPHandlerNonHttpDocumentURI(t *testing.T) {
 }
 
 func TestGenericCSPHandlerWithMetadata(t *testing.T) {
+	t.Parallel()
+
 	csp := CSPReport{
 		CSPReportBody{
 			DocumentURI: "http://example.com",
@@ -177,6 +189,8 @@ func TestGenericCSPHandlerWithMetadata(t *testing.T) {
 }
 
 func TestGenericCSPHandlerWithMetadataObject(t *testing.T) {
+	t.Parallel()
+
 	csp := CSPReport{
 		CSPReportBody{
 			DocumentURI: "http://example.com",
@@ -211,10 +225,14 @@ func TestGenericCSPHandlerWithMetadataObject(t *testing.T) {
 }
 
 func TestGenericCSPHandlerMultipleTypeStatusCode(t *testing.T) {
+	t.Parallel()
+
 	statusCodeValues := []any{"200", 200}
 
 	for _, statusCode := range statusCodeValues {
 		t.Run(fmt.Sprintf("%T", statusCode), func(t *testing.T) {
+			t.Parallel()
+
 			csp := CSPReport{
 				CSPReportBody{
 					DocumentURI: "https://example.com",
@@ -248,6 +266,8 @@ func TestGenericCSPHandlerMultipleTypeStatusCode(t *testing.T) {
 }
 
 func TestGenericCSPHandlerWithSourceFile(t *testing.T) {
+	t.Parallel()
+
 	rawReport := []byte(`{
 		"csp-report": {
 			"document-uri": "https://example.com",
@@ -285,6 +305,8 @@ func TestGenericCSPHandlerWithSourceFile(t *testing.T) {
 }
 
 func TestIsBlockedByDomain(t *testing.T) {
+	t.Parallel()
+
 	domains := []string{"kaspersky-labs.com", "example-tracker.com"}
 
 	cases := []struct {
@@ -310,6 +332,8 @@ func TestIsBlockedByDomain(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.blockedURI, func(t *testing.T) {
+			t.Parallel()
+
 			got := isBlockedByDomain(tc.blockedURI, domains)
 			if got != tc.want {
 				t.Errorf("isBlockedByDomain(%q) = %v, want %v", tc.blockedURI, got, tc.want)
@@ -319,6 +343,8 @@ func TestIsBlockedByDomain(t *testing.T) {
 }
 
 func TestIsBlockedByDomainEmptyList(t *testing.T) {
+	t.Parallel()
+
 	if isBlockedByDomain("https://example.com/foo", []string{}) {
 		t.Error("expected false for empty domain list")
 	}
@@ -328,6 +354,8 @@ func TestIsBlockedByDomainEmptyList(t *testing.T) {
 }
 
 func TestGenericCSPHandlerBlockedDomain(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name       string
 		blockedURI string
@@ -352,6 +380,8 @@ func TestGenericCSPHandlerBlockedDomain(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			rawReport := fmt.Sprintf(`{
 				"csp-report": {
 					"document-uri": "https://example.com",
@@ -374,6 +404,8 @@ func TestGenericCSPHandlerBlockedDomain(t *testing.T) {
 }
 
 func TestCSPHandlerMetricsSuccess(t *testing.T) {
+	t.Parallel()
+
 	payload := []byte(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/app.js"}}`)
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
@@ -394,6 +426,8 @@ func TestCSPHandlerMetricsSuccess(t *testing.T) {
 }
 
 func TestCSPHandlerMetricsDecodeError(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -413,6 +447,8 @@ func TestCSPHandlerMetricsDecodeError(t *testing.T) {
 }
 
 func TestCSPHandlerMetricsFilteredDomain(t *testing.T) {
+	t.Parallel()
+
 	payload := []byte(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://ads.example-tracker.com/asset.js"}}`)
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
@@ -433,6 +469,8 @@ func TestCSPHandlerMetricsFilteredDomain(t *testing.T) {
 }
 
 func TestCSPHandlerMetricsFilteredURI(t *testing.T) {
+	t.Parallel()
+
 	payload := []byte(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"inline"}}`)
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
@@ -453,6 +491,8 @@ func TestCSPHandlerMetricsFilteredURI(t *testing.T) {
 }
 
 func TestCSPHandlerMetricsValidationError(t *testing.T) {
+	t.Parallel()
+
 	payload := []byte(`{"csp-report":{"document-uri":"about:blank","blocked-uri":"https://cdn.example.com/app.js"}}`)
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
@@ -476,6 +516,8 @@ func TestCSPHandlerMetricsValidationError(t *testing.T) {
 }
 
 func TestGenericCSPHandlerReportOnly(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, logBuffer := newTestLogger()
@@ -502,6 +544,8 @@ func TestGenericCSPHandlerReportOnly(t *testing.T) {
 // header the policy came from, so it wins over the route; browsers that
 // omit it fall back to the route the report was sent to.
 func TestCSPHandlerReportOnlyFromDisposition(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		routeReportOnly bool
@@ -519,6 +563,8 @@ func TestCSPHandlerReportOnlyFromDisposition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			registry := prometheus.NewRegistry()
 			m := metrics.New(registry)
 			l, rec := newRecordingLogger(slog.LevelInfo)
@@ -550,6 +596,8 @@ func TestCSPHandlerReportOnlyFromDisposition(t *testing.T) {
 }
 
 func TestGenericCSPHandlerTruncatesQueryStringFragment(t *testing.T) {
+	t.Parallel()
+
 	l, rec := newRecordingLogger(slog.LevelInfo)
 
 	h := NewCSPHandler(false, Filter{}, Options{TruncateQueryStringFragment: true, Logger: l, Metrics: newTestMetrics()})
@@ -578,6 +626,8 @@ func TestGenericCSPHandlerTruncatesQueryStringFragment(t *testing.T) {
 // anything else must fail the whole request the same way the original
 // single-struct decoder did, never be partially accepted.
 func TestCSPHandlerRejectsBodiesThatAreNotASingleReport(t *testing.T) {
+	t.Parallel()
+
 	report := `{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/one.js"}}`
 	tests := []struct {
 		name       string
@@ -595,6 +645,8 @@ func TestCSPHandlerRejectsBodiesThatAreNotASingleReport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			registry := prometheus.NewRegistry()
 			m := metrics.New(registry)
 			l, _ := newTestLogger()
