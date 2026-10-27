@@ -73,7 +73,7 @@ type Rejection struct {
 // one sent from a browser extension, as invalid. name describes the URL in
 // the error.
 func requireHTTPURL(name, url string) *Rejection {
-	if strings.HasPrefix(url, "http") {
+	if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://") {
 		return nil
 	}
 	return &Rejection{Reason: "validation_error", Err: fmt.Errorf("%s ('%s') is invalid", name, url)}

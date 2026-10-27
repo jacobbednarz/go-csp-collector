@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -805,6 +806,44 @@ func TestTruncateQueryStringFragment(t *testing.T) {
 
 			if got := truncateQueryStringFragment(tt.uri); got != tt.want {
 				t.Errorf("truncateQueryStringFragment(%q) = %q, want %q", tt.uri, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRequireHTTPURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		url    string
+		reject bool
+	}{
+		{name: "https", url: "https://example.com/"},
+		{name: "http", url: "http://example.com/"},
+		{name: "extension", url: "chrome-extension://abc/page.html", reject: true},
+		{name: "about", url: "about:blank", reject: true},
+		{name: "empty", url: "", reject: true},
+		// These only share a prefix with http.
+		{name: "scheme_starting_with_http", url: "httpfoo://example.com/", reject: true},
+		{name: "scheme_without_slashes", url: "http:example.com", reject: true},
+		{name: "bare_word", url: "http", reject: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := requireHTTPURL("url", tt.url)
+			if !tt.reject {
+				if got != nil {
+					t.Fatalf("requireHTTPURL(%q) = %+v, want nil", tt.url, got)
+				}
+				return
+			}
+			want := &Rejection{Reason: "validation_error", Err: fmt.Errorf("url ('%s') is invalid", tt.url)}
+			if got == nil || got.Reason != want.Reason || got.Filtered || got.Err.Error() != want.Err.Error() {
+				t.Errorf("requireHTTPURL(%q) = %+v, want %+v", tt.url, got, want)
 			}
 		})
 	}
