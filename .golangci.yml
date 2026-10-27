@@ -13,13 +13,18 @@ linters:
     - godot
     - misspell
     - nilerr
+    - revive
     - tparallel
     - unparam
     - whitespace
+  settings:
+    revive:
+      rules:
+        # Every exported identifier needs a doc comment.
+        - name: exported
   exclusions:
     generated: lax
     presets:
-      - comments
       - common-false-positives
       - legacy
       - std-error-handling

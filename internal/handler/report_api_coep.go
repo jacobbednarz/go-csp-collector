@@ -14,6 +14,7 @@ type COEPReport struct {
 	UserAgent string         `json:"user_agent"`
 }
 
+// ReportType satisfies ReportTyped.
 func (r COEPReport) ReportType() string { return r.Type }
 
 // COEPReportBody describes the blocked load. Type is "corp", "navigation"

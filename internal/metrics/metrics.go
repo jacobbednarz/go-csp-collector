@@ -9,6 +9,7 @@ const (
 	namespace = "csp_collector"
 )
 
+// Metrics are the collector's Prometheus metrics.
 type Metrics struct {
 	Reports          *prometheus.CounterVec
 	NELReports       *prometheus.CounterVec
@@ -19,6 +20,8 @@ type Metrics struct {
 	RequestsInFlight *prometheus.GaugeVec
 }
 
+// New creates the metrics and registers them on registry, along with the
+// Go runtime and process collectors.
 func New(registry *prometheus.Registry) *Metrics {
 	m := &Metrics{
 		Reports: prometheus.NewCounterVec(

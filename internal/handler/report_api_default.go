@@ -18,6 +18,7 @@ type DefaultReport struct {
 	UserAgent string          `json:"user_agent"`
 }
 
+// ReportType satisfies ReportTyped.
 func (r DefaultReport) ReportType() string { return r.Type }
 
 // knownReportTypes are the Reporting API types allowed as the default
