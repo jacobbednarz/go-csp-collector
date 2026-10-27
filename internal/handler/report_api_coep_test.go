@@ -14,6 +14,8 @@ import (
 )
 
 func TestReportAPICOEPHandlerLogsReport(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		truncate bool
@@ -70,6 +72,8 @@ func TestReportAPICOEPHandlerLogsReport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			l, rec := newRecordingLogger(slog.LevelInfo)
 			h := NewReportAPICOEPHandler(Options{TruncateQueryStringFragment: tt.truncate, Logger: l, Metrics: newTestMetrics()})
 
@@ -91,6 +95,8 @@ func TestReportAPICOEPHandlerLogsReport(t *testing.T) {
 }
 
 func TestReportAPICOEPHandlerMetrics(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -125,6 +131,8 @@ func TestReportAPICOEPHandlerMetrics(t *testing.T) {
 }
 
 func TestReportAPICOEPHandlerSetsCORSHeaderOnResponse(t *testing.T) {
+	t.Parallel()
+
 	l, _ := newTestLogger()
 	h := NewReportAPICOEPHandler(Options{Logger: l, Metrics: newTestMetrics()})
 

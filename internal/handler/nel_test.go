@@ -38,11 +38,15 @@ func sampleNELReport(url string) []NELReport {
 }
 
 func TestGenericNELHandlerDisallowedMethods(t *testing.T) {
+	t.Parallel()
+
 	l, _ := newTestLogger()
 	h := NewNELHandler(false, Options{Logger: l, Metrics: newTestMetrics()})
 
 	for _, method := range []string{"GET", "PUT", "DELETE", "PATCH", "TRACE"} {
 		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+
 			req := httptest.NewRequest(method, "/nel", nil)
 			rr := httptest.NewRecorder()
 			h.ServeHTTP(rr, req)
@@ -54,6 +58,8 @@ func TestGenericNELHandlerDisallowedMethods(t *testing.T) {
 }
 
 func TestGenericNELHandlerInvalidJSON(t *testing.T) {
+	t.Parallel()
+
 	l, _ := newTestLogger()
 	h := NewNELHandler(false, Options{Logger: l, Metrics: newTestMetrics()})
 
@@ -67,6 +73,8 @@ func TestGenericNELHandlerInvalidJSON(t *testing.T) {
 }
 
 func TestGenericNELHandlerSkipsInvalidURLAndKeepsRestOfBatch(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, logBuf := newTestLogger()
@@ -93,6 +101,8 @@ func TestGenericNELHandlerSkipsInvalidURLAndKeepsRestOfBatch(t *testing.T) {
 }
 
 func TestGenericNELHandlerLogsReportOnly(t *testing.T) {
+	t.Parallel()
+
 	l, logBuf := newTestLogger()
 	h := NewNELHandler(true, Options{Logger: l, Metrics: newTestMetrics()})
 
@@ -110,6 +120,8 @@ func TestGenericNELHandlerLogsReportOnly(t *testing.T) {
 }
 
 func TestGenericNELHandlerSkipsNonNetworkErrorReports(t *testing.T) {
+	t.Parallel()
+
 	l, logBuf := newTestLogger()
 	h := NewNELHandler(false, Options{Logger: l, Metrics: newTestMetrics()})
 
@@ -130,6 +142,8 @@ func TestGenericNELHandlerSkipsNonNetworkErrorReports(t *testing.T) {
 }
 
 func TestGenericNELHandlerMixedBatchPreservesWellFormedReport(t *testing.T) {
+	t.Parallel()
+
 	l, logBuf := newTestLoggerAtLevel(slog.LevelDebug)
 	h := NewNELHandler(false, Options{Logger: l, Metrics: newTestMetrics()})
 
@@ -155,6 +169,8 @@ func TestGenericNELHandlerMixedBatchPreservesWellFormedReport(t *testing.T) {
 }
 
 func TestGenericNELHandlerMetricsSuccessAndIgnored(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -187,6 +203,8 @@ func TestGenericNELHandlerMetricsSuccessAndIgnored(t *testing.T) {
 }
 
 func TestGenericNELHandlerRejectsBareObject(t *testing.T) {
+	t.Parallel()
+
 	// NEL never sets SingleObject, so unlike /csp, a valid but
 	// non-array body must still be rejected, not silently accepted as a
 	// single-item batch.
@@ -209,6 +227,8 @@ func TestGenericNELHandlerRejectsBareObject(t *testing.T) {
 }
 
 func TestGenericNELHandlerTruncatesQueryStringFragment(t *testing.T) {
+	t.Parallel()
+
 	l, rec := newRecordingLogger(slog.LevelInfo)
 	h := NewNELHandler(false, Options{TruncateQueryStringFragment: true, Logger: l, Metrics: newTestMetrics()})
 

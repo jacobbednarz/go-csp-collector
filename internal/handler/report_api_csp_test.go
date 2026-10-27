@@ -16,11 +16,15 @@ import (
 )
 
 func TestGenericReportAPICSPHandlerDisallowedMethods(t *testing.T) {
+	t.Parallel()
+
 	l, _ := newTestLogger()
 	h := NewReportAPICSPHandler(Filter{}, Options{Logger: l, Metrics: newTestMetrics()})
 
 	for _, method := range []string{"GET", "PUT", "DELETE", "PATCH", "TRACE"} {
 		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+
 			req := httptest.NewRequest(method, "/reporting-api/csp", nil)
 			rr := httptest.NewRecorder()
 			h.ServeHTTP(rr, req)
@@ -32,6 +36,8 @@ func TestGenericReportAPICSPHandlerDisallowedMethods(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerRejectsBareObject(t *testing.T) {
+	t.Parallel()
+
 	// reporting-api/csp never sets SingleObject, so unlike /csp, a
 	// valid but non-array body must still be rejected.
 	registry := prometheus.NewRegistry()
@@ -53,6 +59,8 @@ func TestGenericReportAPICSPHandlerRejectsBareObject(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerWellFormedBatch(t *testing.T) {
+	t.Parallel()
+
 	rawReport := []byte(`[
     {
         "age": 156165,
@@ -119,6 +127,8 @@ func TestGenericReportAPICSPHandlerWellFormedBatch(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerMetricsDecodeError(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -137,6 +147,8 @@ func TestGenericReportAPICSPHandlerMetricsDecodeError(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerMetricsFilteredURI(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -156,6 +168,8 @@ func TestGenericReportAPICSPHandlerMetricsFilteredURI(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerValidationRejectionWithNilMetrics(t *testing.T) {
+	t.Parallel()
+
 	l, _ := newTestLogger()
 
 	h := NewReportAPICSPHandler(Filter{BlockedURIs: []string{"inline"}}, Options{Logger: l, Metrics: newTestMetrics()})
@@ -170,6 +184,8 @@ func TestGenericReportAPICSPHandlerValidationRejectionWithNilMetrics(t *testing.
 }
 
 func TestGenericReportAPICSPHandlerMetricsFilteredDomain(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -189,6 +205,8 @@ func TestGenericReportAPICSPHandlerMetricsFilteredDomain(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerMetricsValidationError(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -211,6 +229,8 @@ func TestGenericReportAPICSPHandlerMetricsValidationError(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerFilteredReportKeepsRestOfBatch(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, logBuf := newTestLogger()
@@ -240,6 +260,8 @@ func TestGenericReportAPICSPHandlerFilteredReportKeepsRestOfBatch(t *testing.T) 
 }
 
 func TestGenericReportAPICSPHandlerMetricsSuccess(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -259,6 +281,8 @@ func TestGenericReportAPICSPHandlerMetricsSuccess(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerMetricsSuccessEnforced(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -278,6 +302,8 @@ func TestGenericReportAPICSPHandlerMetricsSuccessEnforced(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerTruncatesQueryStringFragment(t *testing.T) {
+	t.Parallel()
+
 	l, rec := newRecordingLogger(slog.LevelInfo)
 	h := NewReportAPICSPHandler(Filter{}, Options{TruncateQueryStringFragment: true, Logger: l, Metrics: newTestMetrics()})
 
@@ -302,6 +328,8 @@ func TestGenericReportAPICSPHandlerTruncatesQueryStringFragment(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerSkipsNonCSPViolationReports(t *testing.T) {
+	t.Parallel()
+
 	l, logBuf := newTestLogger()
 	h := NewReportAPICSPHandler(Filter{}, Options{Logger: l, Metrics: newTestMetrics()})
 
@@ -319,6 +347,8 @@ func TestGenericReportAPICSPHandlerSkipsNonCSPViolationReports(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerMixedBatchPreservesWellFormedReport(t *testing.T) {
+	t.Parallel()
+
 	l, logBuf := newTestLoggerAtLevel(slog.LevelDebug)
 	h := NewReportAPICSPHandler(Filter{}, Options{Logger: l, Metrics: newTestMetrics()})
 
@@ -344,6 +374,8 @@ func TestGenericReportAPICSPHandlerMixedBatchPreservesWellFormedReport(t *testin
 }
 
 func TestGenericReportAPICSPHandlerMetadata(t *testing.T) {
+	t.Parallel()
+
 	l, logBuf := newTestLogger()
 	h := NewReportAPICSPHandler(Filter{}, Options{Logger: l, Metrics: newTestMetrics()})
 
@@ -361,6 +393,8 @@ func TestGenericReportAPICSPHandlerMetadata(t *testing.T) {
 }
 
 func TestGenericReportAPICSPHandlerSetsCORSHeaderOnActualResponse(t *testing.T) {
+	t.Parallel()
+
 	// The OPTIONS preflight (ReportAPICorsHandler) has always advertised
 	// the requesting origin as allowed, but the actual POST response never
 	// carried any CORS headers of its own. Browsers apply the CORS check
@@ -382,6 +416,8 @@ func TestGenericReportAPICSPHandlerSetsCORSHeaderOnActualResponse(t *testing.T) 
 }
 
 func TestGenericReportAPICSPHandlerCORSHeaderPresentOnErrorResponses(t *testing.T) {
+	t.Parallel()
+
 	// The CORS header needs to be on every response the handler can
 	// produce, not just the 200 path - a browser applies its CORS check
 	// regardless of status code.
@@ -402,6 +438,8 @@ func TestGenericReportAPICSPHandlerCORSHeaderPresentOnErrorResponses(t *testing.
 }
 
 func TestGenericReportAPICSPHandlerCORSFallsBackToWildcardWithNoOrigin(t *testing.T) {
+	t.Parallel()
+
 	l, _ := newTestLogger()
 
 	h := NewReportAPICSPHandler(Filter{}, Options{Logger: l, Metrics: newTestMetrics()})
@@ -416,6 +454,8 @@ func TestGenericReportAPICSPHandlerCORSFallsBackToWildcardWithNoOrigin(t *testin
 }
 
 func TestGenericReportAPICSPHandlerJSONUnmarshal(t *testing.T) {
+	t.Parallel()
+
 	rawReport := []byte(`{"type":"csp-violation","body":{"blockedURL":"inline"}}`)
 	var report ReportAPIReport
 	if err := json.Unmarshal(rawReport, &report); err != nil {
@@ -427,6 +467,8 @@ func TestGenericReportAPICSPHandlerJSONUnmarshal(t *testing.T) {
 }
 
 func TestReportAPICorsHandlerPreflight(t *testing.T) {
+	t.Parallel()
+
 	req := httptest.NewRequest("OPTIONS", "/reporting-api/csp", nil)
 	req.Header.Set("Origin", "https://example.com")
 	req.Header.Set("Access-Control-Request-Method", "POST")
@@ -458,6 +500,8 @@ func TestReportAPICorsHandlerPreflight(t *testing.T) {
 }
 
 func TestReportAPICorsHandlerPreflightDefaultsWithoutRequestHeaders(t *testing.T) {
+	t.Parallel()
+
 	req := httptest.NewRequest("OPTIONS", "/reporting-api/csp", nil)
 	rr := httptest.NewRecorder()
 
@@ -478,6 +522,8 @@ func TestReportAPICorsHandlerPreflightDefaultsWithoutRequestHeaders(t *testing.T
 // blocked code as `sample` when the policy has 'report-sample'. It's logged
 // under the same field name as the legacy handler's script-sample.
 func TestGenericReportAPICSPHandlerLogsSample(t *testing.T) {
+	t.Parallel()
+
 	l, rec := newRecordingLogger(slog.LevelInfo)
 	h := NewReportAPICSPHandler(Filter{}, Options{Logger: l, Metrics: newTestMetrics()})
 

@@ -8,6 +8,8 @@ import (
 )
 
 func TestNewRegistersMetrics(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 	if m == nil {
@@ -24,6 +26,8 @@ func TestNewRegistersMetrics(t *testing.T) {
 }
 
 func TestCountersIncrement(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 
@@ -51,6 +55,8 @@ func TestCountersIncrement(t *testing.T) {
 }
 
 func TestHistogramObserves(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := New(registry)
 

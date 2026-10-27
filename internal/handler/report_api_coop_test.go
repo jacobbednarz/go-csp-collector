@@ -14,6 +14,8 @@ import (
 )
 
 func TestReportAPICOOPHandlerLogsReport(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		truncate bool
@@ -133,6 +135,8 @@ func TestReportAPICOOPHandlerLogsReport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			l, rec := newRecordingLogger(slog.LevelInfo)
 			h := NewReportAPICOOPHandler(Options{TruncateQueryStringFragment: tt.truncate, Logger: l, Metrics: newTestMetrics()})
 
@@ -157,6 +161,8 @@ func TestReportAPICOOPHandlerLogsReport(t *testing.T) {
 // "enforce" or "reporting" (not CSP's "report"). Reports with an invalid
 // URL are skipped without costing the rest of the batch.
 func TestReportAPICOOPHandlerMetrics(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -191,6 +197,8 @@ func TestReportAPICOOPHandlerMetrics(t *testing.T) {
 }
 
 func TestReportAPICOOPHandlerSetsCORSHeaderOnResponse(t *testing.T) {
+	t.Parallel()
+
 	l, _ := newTestLogger()
 	h := NewReportAPICOOPHandler(Options{Logger: l, Metrics: newTestMetrics()})
 

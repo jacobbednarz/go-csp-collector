@@ -24,12 +24,16 @@ import (
 var cspViolationReportHandler = handler.NewCSPHandler(false, handler.Filter{BlockedURIs: defaultBlockedURIs}, handler.Options{Logger: slog.New(slog.DiscardHandler), Metrics: metrics.New(prometheus.NewRegistry())})
 
 func TestHandlerForDisallowedMethods(t *testing.T) {
+	t.Parallel()
+
 	disallowedMethods := []string{"GET", "DELETE", "PUT", "TRACE", "PATCH"}
 	randomUrls := []string{"/", "/blah"}
 
 	for _, method := range disallowedMethods {
 		for _, url := range randomUrls {
 			t.Run(method+url, func(t *testing.T) {
+				t.Parallel()
+
 				request, err := http.NewRequest(method, url, nil)
 				if err != nil {
 					t.Fatalf("failed to create request: %v", err)
@@ -54,6 +58,8 @@ func TestHandlerForDisallowedMethods(t *testing.T) {
 // hierarchical schemes. The built-in list has to drop both forms, and must not
 // catch the keywords CSP reports for actionable violations.
 func TestDefaultFilterList(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		blockedURI string
@@ -87,6 +93,8 @@ func TestDefaultFilterList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			l := slog.New(slog.DiscardHandler)
 			h := handler.NewCSPHandler(false, handler.Filter{BlockedURIs: defaultBlockedURIs}, handler.Options{Logger: l, Metrics: metrics.New(prometheus.NewRegistry())})
 
@@ -104,6 +112,8 @@ func TestDefaultFilterList(t *testing.T) {
 // The Helm chart can't read files outside its own directory, so it ships a
 // copy of the built-in list as the example for custom.filterlist.
 func TestHelmFilterListMatchesBuiltIn(t *testing.T) {
+	t.Parallel()
+
 	helm, err := os.ReadFile("deployments/kubernetes-helm/configMaps/filterlist.txt")
 	if err != nil {
 		t.Fatal(err)
@@ -114,6 +124,8 @@ func TestHelmFilterListMatchesBuiltIn(t *testing.T) {
 }
 
 func TestPrometheusMiddlewareLabelsAndInFlight(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	wrapped := promhttp.InstrumentHandlerDuration(
@@ -166,6 +178,8 @@ func TestPrometheusMiddlewareLabelsAndInFlight(t *testing.T) {
 }
 
 func TestMetricsEndpointUsesCustomRegistry(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	m.Reports.WithLabelValues("csp", "enforced").Inc()
@@ -196,10 +210,14 @@ func TestMetricsEndpointUsesCustomRegistry(t *testing.T) {
 // Access-Control-Allow-Origin and Access-Control-Allow-Headers covering
 // content-type, and otherwise drops the batch and backs off the endpoint.
 func TestReportingAPIRoutesAnswerCORSPreflight(t *testing.T) {
+	t.Parallel()
+
 	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t), handler: handler.Options{Logger: slog.New(slog.DiscardHandler), Metrics: metrics.New(prometheus.NewRegistry())}})
 
 	for _, path := range []string{"/nel", "/nel/report-only", "/reporting-api/csp", "/reporting-api/coop", "/reporting-api/coep", "/reporting-api/default"} {
 		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
 			req := httptest.NewRequest(http.MethodOptions, path, nil)
 			req.Header.Set("Origin", "https://site.example")
 			req.Header.Set("Access-Control-Request-Method", "POST")
@@ -230,11 +248,15 @@ func TestReportingAPIRoutesAnswerCORSPreflight(t *testing.T) {
 // The upload itself must carry the CORS headers too: Fetch-based Reporting
 // implementations apply the CORS check to the actual response.
 func TestReportingAPIRoutesSetCORSHeadersOnUpload(t *testing.T) {
+	t.Parallel()
+
 	logger := slog.New(slog.DiscardHandler)
 	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t), handler: handler.Options{Logger: logger, Metrics: metrics.New(prometheus.NewRegistry())}})
 
 	for _, path := range []string{"/nel", "/nel/report-only", "/reporting-api/csp", "/reporting-api/coop", "/reporting-api/coep", "/reporting-api/default"} {
 		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
 			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("[]"))
 			req.Header.Set("Origin", "https://site.example")
 			req.Header.Set("Content-Type", "application/reports+json")
@@ -261,6 +283,8 @@ func allEndpoints(t *testing.T) map[string]bool {
 }
 
 func TestParseEndpoints(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		value   string
@@ -278,6 +302,8 @@ func TestParseEndpoints(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			got, err := parseEndpoints(tt.value)
 			if tt.wantErr != "" {
 				if err == nil || err.Error() != tt.wantErr {
@@ -299,6 +325,8 @@ func TestParseEndpoints(t *testing.T) {
 // routes must not be registered at all, so they fall through to the 404
 // handler, while the health check stays available regardless.
 func TestNewRouterOnlyRegistersEnabledEndpoints(t *testing.T) {
+	t.Parallel()
+
 	routes := []struct {
 		group  string
 		method string
@@ -323,6 +351,8 @@ func TestNewRouterOnlyRegistersEnabledEndpoints(t *testing.T) {
 
 	for _, enabled := range []string{"csp", "reporting-api-csp", "nel", "csp,nel", "csp,reporting-api-csp,nel", "reporting-api-coop", "reporting-api-coep", "reporting-api-default"} {
 		t.Run(enabled, func(t *testing.T) {
+			t.Parallel()
+
 			endpoints, err := parseEndpoints(enabled)
 			if err != nil {
 				t.Fatalf("parseEndpoints(%q): %v", enabled, err)
@@ -353,6 +383,8 @@ func TestNewRouterOnlyRegistersEnabledEndpoints(t *testing.T) {
 // paths redirect with a 307, which keeps a POST and its body; a 301 lets a
 // client retry as a GET, losing the report.
 func TestNewRouterMethodAndPathHandling(t *testing.T) {
+	t.Parallel()
+
 	r := newRouter(routerConfig{healthCheckPath: defaultHealthCheckPath, endpoints: allEndpoints(t), handler: handler.Options{Logger: slog.New(slog.DiscardHandler), Metrics: metrics.New(prometheus.NewRegistry())}})
 
 	tests := []struct {
@@ -375,6 +407,8 @@ func TestNewRouterMethodAndPathHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			rr := httptest.NewRecorder()
 			r.ServeHTTP(rr, httptest.NewRequest(tt.method, tt.path, strings.NewReader("[]")))
 
@@ -390,6 +424,8 @@ func TestNewRouterMethodAndPathHandling(t *testing.T) {
 // Without timeouts a client can hold a connection open indefinitely by
 // sending its headers or body slowly.
 func TestNewServerSetsTimeouts(t *testing.T) {
+	t.Parallel()
+
 	h := http.NewServeMux()
 	got := newServer(h)
 	want := &http.Server{
@@ -407,6 +443,8 @@ func TestNewServerSetsTimeouts(t *testing.T) {
 // A rollout sends SIGTERM to the old pod while it may still be handling
 // reports. Those requests should finish rather than be cut off.
 func TestServeFinishesInFlightRequestsOnShutdown(t *testing.T) {
+	t.Parallel()
+
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -451,6 +489,8 @@ func TestServeFinishesInFlightRequestsOnShutdown(t *testing.T) {
 }
 
 func TestServeReturnsListenerErrors(t *testing.T) {
+	t.Parallel()
+
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -467,6 +507,8 @@ func TestServeReturnsListenerErrors(t *testing.T) {
 // logrus' lowercase level names and RFC 3339 timestamps. Text output leaves
 // out a report's empty message, while JSON has always kept it.
 func TestNewLogHandlerKeepsTheLogFormat(t *testing.T) {
+	t.Parallel()
+
 	timestamp := regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})`)
 	tests := []struct {
 		format string
@@ -488,6 +530,8 @@ timestamp=TS level=warning message="unable to parse client ip" error=bad
 
 	for _, tt := range tests {
 		t.Run(tt.format, func(t *testing.T) {
+			t.Parallel()
+
 			var buf bytes.Buffer
 			l := slog.New(newLogHandler(&buf, tt.format, slog.LevelInfo))
 			l.Info("", "blocked_uri", "inline", "document_uri", "https://example.com/a b", "metadata", nil, "report_only", false)
@@ -502,6 +546,8 @@ timestamp=TS level=warning message="unable to parse client ip" error=bad
 }
 
 func TestParseFilterList(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		content string
@@ -518,6 +564,8 @@ func TestParseFilterList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			if got := parseFilterList(tt.content); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("parseFilterList(%q) = %q, want %q", tt.content, got, tt.want)
 			}

@@ -16,6 +16,8 @@ import (
 // The default endpoint takes every report type in one batch and logs the
 // body as raw JSON, since its shape depends on the type.
 func TestReportAPIDefaultHandlerLogsEveryType(t *testing.T) {
+	t.Parallel()
+
 	l, rec := newRecordingLogger(slog.LevelInfo)
 	h := NewReportAPIDefaultHandler(Options{Logger: l, Metrics: newTestMetrics()})
 
@@ -50,6 +52,8 @@ func TestReportAPIDefaultHandlerLogsEveryType(t *testing.T) {
 // --truncate-query-fragment the body is left out rather than logged with
 // query strings the operator asked to have removed.
 func TestReportAPIDefaultHandlerTruncationOmitsBody(t *testing.T) {
+	t.Parallel()
+
 	l, rec := newRecordingLogger(slog.LevelInfo)
 	h := NewReportAPIDefaultHandler(Options{TruncateQueryStringFragment: true, Logger: l, Metrics: newTestMetrics()})
 
@@ -72,6 +76,8 @@ func TestReportAPIDefaultHandlerTruncationOmitsBody(t *testing.T) {
 // controlled, so labelling with it directly would let anyone create
 // unlimited metric series.
 func TestReportAPIDefaultHandlerMetrics(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
@@ -111,6 +117,8 @@ func TestReportAPIDefaultHandlerMetrics(t *testing.T) {
 }
 
 func TestReportAPIDefaultHandlerSetsCORSHeaderOnResponse(t *testing.T) {
+	t.Parallel()
+
 	l, _ := newTestLogger()
 	h := NewReportAPIDefaultHandler(Options{Logger: l, Metrics: newTestMetrics()})
 
