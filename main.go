@@ -19,7 +19,6 @@ import (
 
 	"github.com/jacobbednarz/go-csp-collector/internal/handler"
 	"github.com/jacobbednarz/go-csp-collector/internal/metrics"
-	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -42,7 +41,7 @@ var (
 	//go:embed sample.filterlist.txt
 	defaultFilterList string
 
-	defaultBlockedURIs = utils.ParseFilterList(defaultFilterList)
+	defaultBlockedURIs = parseFilterList(defaultFilterList)
 )
 
 func main() {
@@ -140,7 +139,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return fail("unable to read filter list", "path", *blockedURIFile, "error", err)
 		}
-		ignoredBlockedURIs = utils.ParseFilterList(string(content))
+		ignoredBlockedURIs = parseFilterList(string(content))
 	} else {
 		logger.Debug("using the built-in filter list")
 	}
@@ -153,7 +152,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return fail("unable to read domain filter list", "path", *blockedDomainFile, "error", err)
 		}
-		blockedDomains = utils.ParseFilterList(string(content))
+		blockedDomains = parseFilterList(string(content))
 	}
 
 	// The path becomes part of a ServeMux pattern, where braces are
@@ -268,6 +267,20 @@ func newLogHandler(w io.Writer, format string, level slog.Leveler) slog.Handler 
 		return slog.NewJSONHandler(w, opts)
 	}
 	return slog.NewTextHandler(w, opts)
+}
+
+// parseFilterList returns the entries of a filter file, one per line,
+// skipping blank lines and # comments.
+func parseFilterList(content string) []string {
+	var entries []string
+	for line := range strings.Lines(content) {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		entries = append(entries, line)
+	}
+	return entries
 }
 
 // shutdownTimeout is how long in-flight requests get to finish after a

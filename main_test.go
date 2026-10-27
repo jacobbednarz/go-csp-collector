@@ -500,3 +500,27 @@ timestamp=TS level=warning message="unable to parse client ip" error=bad
 		})
 	}
 }
+
+func TestParseFilterList(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    []string
+	}{
+		{name: "skips_blank_lines_and_comments", content: "resource://\n\n# comment\nchrome-extension://\n", want: []string{"resource://", "chrome-extension://"}},
+		// Filter files saved on Windows, or checked out with CRLF line
+		// endings, would otherwise leave a trailing \r on every entry so
+		// none of them match.
+		{name: "trims_whitespace_and_crlf", content: "# comment\r\nchrome-extension\r\n  \r\n moz-extension \r\n", want: []string{"chrome-extension", "moz-extension"}},
+		{name: "no_trailing_newline", content: "about", want: []string{"about"}},
+		{name: "empty", content: "", want: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := parseFilterList(tt.content); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parseFilterList(%q) = %q, want %q", tt.content, got, tt.want)
+			}
+		})
+	}
+}

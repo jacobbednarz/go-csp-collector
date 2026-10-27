@@ -719,3 +719,25 @@ func TestBatchReportHandlerMalformedBodyLogsNothing(t *testing.T) {
 		})
 	}
 }
+
+func TestTruncateQueryStringFragment(t *testing.T) {
+	tests := []struct {
+		name string
+		uri  string
+		want string
+	}{
+		{name: "query_and_fragment", uri: "http://localhost.com/?test#anchor", want: "http://localhost.com/"},
+		{name: "neither", uri: "http://example.invalid", want: "http://example.invalid"},
+		{name: "fragment", uri: "http://example.invalid#a", want: "http://example.invalid"},
+		{name: "query", uri: "http://example.invalid?a", want: "http://example.invalid"},
+		{name: "fragment_before_query", uri: "http://example.invalid#b?a", want: "http://example.invalid"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := truncateQueryStringFragment(tt.uri); got != tt.want {
+				t.Errorf("truncateQueryStringFragment(%q) = %q, want %q", tt.uri, got, tt.want)
+			}
+		})
+	}
+}
