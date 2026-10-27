@@ -73,7 +73,7 @@ func TestLogsPath(t *testing.T) {
 	}
 	recorder := httptest.NewRecorder()
 
-	cspViolationHandler := handler.NewCSPHandler(false, []string{"foo"}, nil, handler.Options{Logger: log, Metrics: metrics.New(prometheus.NewRegistry())})
+	cspViolationHandler := handler.NewCSPHandler(false, handler.Filter{BlockedURIs: []string{"foo"}}, handler.Options{Logger: log, Metrics: metrics.New(prometheus.NewRegistry())})
 	cspViolationHandler.ServeHTTP(recorder, request)
 
 	response := recorder.Result()

@@ -21,7 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
-var cspViolationReportHandler = handler.NewCSPHandler(false, defaultBlockedURIs, nil, handler.Options{Logger: slog.New(slog.DiscardHandler), Metrics: metrics.New(prometheus.NewRegistry())})
+var cspViolationReportHandler = handler.NewCSPHandler(false, handler.Filter{BlockedURIs: defaultBlockedURIs}, handler.Options{Logger: slog.New(slog.DiscardHandler), Metrics: metrics.New(prometheus.NewRegistry())})
 
 func TestHandlerForDisallowedMethods(t *testing.T) {
 	disallowedMethods := []string{"GET", "DELETE", "PUT", "TRACE", "PATCH"}
@@ -88,7 +88,7 @@ func TestDefaultFilterList(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			l := slog.New(slog.DiscardHandler)
-			h := handler.NewCSPHandler(false, defaultBlockedURIs, nil, handler.Options{Logger: l, Metrics: metrics.New(prometheus.NewRegistry())})
+			h := handler.NewCSPHandler(false, handler.Filter{BlockedURIs: defaultBlockedURIs}, handler.Options{Logger: l, Metrics: metrics.New(prometheus.NewRegistry())})
 
 			body := `{"csp-report":{"document-uri":"https://example.com/","blocked-uri":"` + tt.blockedURI + `"}}`
 			rr := httptest.NewRecorder()

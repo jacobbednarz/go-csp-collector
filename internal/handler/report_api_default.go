@@ -2,10 +2,8 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"slices"
-	"strings"
 )
 
 // DefaultReport is any report delivered to a Reporting API "default"
@@ -46,19 +44,14 @@ func NewReportAPIDefaultHandler(opts Options) http.Handler {
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
-		Validate: func(report DefaultReport) (string, error) {
-			if !strings.HasPrefix(report.URL, "http") {
-				return "validation_error", fmt.Errorf("url ('%s') is invalid", report.URL)
-			}
-			return "", nil
+		Validate: func(report DefaultReport) *Rejection {
+			return requireHTTPURL("url", report.URL)
 		},
 
-		Process: func(report DefaultReport, r *http.Request, metadata interface{}) ProcessResult {
+		Process: func(report DefaultReport) ProcessResult {
 			lf := Fields{
-				"type":     report.Type,
-				"url":      report.URL,
-				"metadata": metadata,
-				"path":     r.URL.Path,
+				"type": report.Type,
+				"url":  report.URL,
 			}
 
 			// URLs inside a body of unknown shape can't be found reliably,

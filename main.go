@@ -144,8 +144,7 @@ func main() {
 	registry := prometheus.NewRegistry()
 	r := newRouter(routerConfig{
 		healthCheckPath: *healthCheckPath,
-		blockedURIs:     ignoredBlockedURIs,
-		blockedDomains:  blockedDomains,
+		filter:          handler.Filter{BlockedURIs: ignoredBlockedURIs, BlockedDomains: blockedDomains},
 		endpoints:       enabledEndpoints,
 		handler: handler.Options{
 			TruncateQueryStringFragment: *truncateQueryStringFragment,
@@ -275,8 +274,7 @@ func serve(ctx context.Context, srv *http.Server, ln net.Listener) error {
 // routerConfig holds the flag values that shape how reports are handled.
 type routerConfig struct {
 	healthCheckPath string
-	blockedURIs     []string
-	blockedDomains  []string
+	filter          handler.Filter
 	endpoints       map[string]bool
 	handler         handler.Options
 }
@@ -321,16 +319,16 @@ func newRouter(cfg routerConfig) *http.ServeMux {
 	}
 
 	if cfg.endpoints["csp"] {
-		r.Handle("POST /csp/report-only", wrapWithPrometheus("csp", "/csp/report-only", handler.NewCSPHandler(true, cfg.blockedURIs, cfg.blockedDomains, cfg.handler)))
+		r.Handle("POST /csp/report-only", wrapWithPrometheus("csp", "/csp/report-only", handler.NewCSPHandler(true, cfg.filter, cfg.handler)))
 
-		r.Handle("POST /csp", wrapWithPrometheus("csp", "/csp", handler.NewCSPHandler(false, cfg.blockedURIs, cfg.blockedDomains, cfg.handler)))
+		r.Handle("POST /csp", wrapWithPrometheus("csp", "/csp", handler.NewCSPHandler(false, cfg.filter, cfg.handler)))
 
-		r.Handle("POST /{$}", wrapWithPrometheus("csp", "/", handler.NewCSPHandler(false, cfg.blockedURIs, cfg.blockedDomains, cfg.handler)))
+		r.Handle("POST /{$}", wrapWithPrometheus("csp", "/", handler.NewCSPHandler(false, cfg.filter, cfg.handler)))
 	}
 
 	if cfg.endpoints["reporting-api-csp"] {
 		r.HandleFunc("OPTIONS /reporting-api/csp", handler.ReportAPICorsHandler)
-		r.Handle("POST /reporting-api/csp", wrapWithPrometheus("reporting_api_csp", "/reporting-api/csp", handler.NewReportAPICSPHandler(cfg.blockedURIs, cfg.blockedDomains, cfg.handler)))
+		r.Handle("POST /reporting-api/csp", wrapWithPrometheus("reporting_api_csp", "/reporting-api/csp", handler.NewReportAPICSPHandler(cfg.filter, cfg.handler)))
 	}
 
 	if cfg.endpoints["nel"] {

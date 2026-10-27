@@ -3,10 +3,12 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 )
@@ -47,6 +49,38 @@ type ProcessResult struct {
 	Mode   string // second Prometheus label, e.g. "enforced" / "report_only"
 }
 
+// modeLabel is the metrics mode for a report that's either report-only or
+// enforced.
+func modeLabel(reportOnly bool) string {
+	if reportOnly {
+		return "report_only"
+	}
+	return "enforced"
+}
+
+// Rejection is why Validate turned a report away.
+type Rejection struct {
+	// Reason is the metric label for the rejection.
+	Reason string
+
+	// Filtered marks a report that matched a configured filter, counted in
+	// reports_filtered_total. Anything else is invalid and counted in
+	// reports_errors_total.
+	Filtered bool
+
+	Err error
+}
+
+// requireHTTPURL rejects a report whose URL isn't a web page's, such as
+// one sent from a browser extension, as invalid. name describes the URL in
+// the error.
+func requireHTTPURL(name, url string) *Rejection {
+	if strings.HasPrefix(url, "http") {
+		return nil
+	}
+	return &Rejection{Reason: "validation_error", Err: fmt.Errorf("%s ('%s') is invalid", name, url)}
+}
+
 // BatchReportHandler is the shared implementation behind every report
 // endpoint: method check, resilient per-item decode, validation, metadata,
 // client IP, and metrics. Type-specific behavior is supplied via the
@@ -64,31 +98,26 @@ type BatchReportHandler[T ReportTyped] struct {
 
 	Options
 
-	// Validate runs against each type-matched report before it's processed.
-	// reason is the metric label for the rejection cause. A rejected report
+	// Validate runs against each type-matched report before it's processed,
+	// returning nil to accept it. A rejected report
 	// in a batch is counted and skipped: the Reporting API treats any
 	// non-2xx response as a failed upload, discarding the whole batch and
 	// backing off the endpoint, so one filtered report must not cost the
 	// rest. In SingleObject mode the report is the request, so a rejection
 	// is a 400.
-	Validate func(report T) (reason string, err error)
+	Validate func(report T) *Rejection
 
 	// Process turns one decoded, type-matched report into log fields and a
-	// metrics mode. Field truncation is the caller's responsibility.
-	Process func(report T, r *http.Request, metadata interface{}) ProcessResult
+	// metrics mode. Field truncation is the caller's responsibility. The
+	// fields that come from the request rather than the report (metadata,
+	// path and client_ip) are added afterwards.
+	Process func(report T) ProcessResult
 
 	// RecordSuccessMetric overrides the default
 	// Reports.WithLabelValues(HandlerName, mode) increment, for handlers
 	// that also record a metric of their own (e.g. NEL's deprecated
 	// NELReports).
 	RecordSuccessMetric func(mode string)
-
-	// RecordValidationErrorMetric overrides the default
-	// ReportErrors.WithLabelValues(HandlerName, reason) increment on a
-	// Validate rejection, for handlers whose rejection reasons span more
-	// than one metric object (e.g. CSP's blocked_uri/blocked_domain vs.
-	// validation_error).
-	RecordValidationErrorMetric func(reason string)
 
 	// SetResponseHeaders runs first, before the method check, so it
 	// applies to every response. Used by reporting-api/csp to set CORS
@@ -130,16 +159,8 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var metadata interface{}
-	if h.MetadataObject {
-		metadataMap := make(map[string]string)
-		for k, v := range r.URL.Query() {
-			metadataMap[k] = v[0]
-		}
-		metadata = metadataMap
-	} else if metadatas, ok := r.URL.Query()["metadata"]; ok {
-		metadata = metadatas[0]
-	}
+	metadata := h.metadata(r)
+	clientIP := h.clientIP(r)
 
 	for _, item := range items {
 		if h.ExpectedType != "" && item.ReportType() != h.ExpectedType {
@@ -148,25 +169,26 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 		}
 
 		if h.Validate != nil {
-			if reason, err := h.Validate(item); err != nil {
-				if h.RecordValidationErrorMetric != nil {
-					h.RecordValidationErrorMetric(reason)
+			if rej := h.Validate(item); rej != nil {
+				if rej.Filtered {
+					h.Metrics.ReportFiltered.WithLabelValues(h.HandlerName, rej.Reason).Inc()
 				} else {
-					h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, reason).Inc()
+					h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, rej.Reason).Inc()
 				}
-				h.Logger.Debug("received invalid payload", "error", err)
+				h.Logger.Debug("received invalid payload", "error", rej.Err)
 				if h.SingleObject {
-					http.Error(w, err.Error(), http.StatusBadRequest)
+					http.Error(w, rej.Err.Error(), http.StatusBadRequest)
 					return
 				}
 				continue
 			}
 		}
 
-		result := h.Process(item, r, metadata)
-
-		if h.ClientIP != ClientIPNone {
-			addClientIPField(result.Fields, r, h.ClientIP, h.Logger)
+		result := h.Process(item)
+		result.Fields["metadata"] = metadata
+		result.Fields["path"] = r.URL.Path
+		if clientIP != "" {
+			result.Fields["client_ip"] = clientIP
 		}
 
 		h.Logger.LogAttrs(r.Context(), slog.LevelInfo, "", result.Fields.attrs()...)
@@ -224,15 +246,38 @@ func truncateURLFields(fields Fields, keys ...string) {
 	}
 }
 
-func addClientIPField(fields Fields, r *http.Request, mode ClientIPMode, logger *slog.Logger) {
+// metadata is the metadata field logged with every report in r: either
+// the metadata query parameter, or every query parameter as an object.
+func (h *BatchReportHandler[T]) metadata(r *http.Request) any {
+	query := r.URL.Query()
+	if h.MetadataObject {
+		metadata := make(map[string]string, len(query))
+		for k, v := range query {
+			metadata[k] = v[0]
+		}
+		return metadata
+	}
+	if v, ok := query["metadata"]; ok {
+		return v[0]
+	}
+	return nil
+}
+
+// clientIP is the client_ip field logged with every report in r, or empty
+// when it isn't logged. It's worked out once per request, so an address
+// that can't be parsed is warned about once rather than for every report
+// in the batch.
+func (h *BatchReportHandler[T]) clientIP(r *http.Request) string {
+	if h.ClientIP == ClientIPNone {
+		return ""
+	}
 	ip, err := utils.GetClientIP(r)
 	if err != nil {
-		logger.Warn("unable to parse client ip", "error", err)
-		return
+		h.Logger.Warn("unable to parse client ip", "error", err)
+		return ""
 	}
-	if mode == ClientIPTruncated {
-		fields["client_ip"] = utils.TruncateClientIP(ip)
-	} else {
-		fields["client_ip"] = ip.String()
+	if h.ClientIP == ClientIPTruncated {
+		return utils.TruncateClientIP(ip)
 	}
+	return ip.String()
 }
