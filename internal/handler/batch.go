@@ -149,7 +149,6 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 		h.Logger.Debug("unable to read request body", "error", err)
 		return
 	}
-	defer r.Body.Close()
 
 	items, err := h.decode(body, r)
 	if err != nil {

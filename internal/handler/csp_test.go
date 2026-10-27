@@ -211,7 +211,7 @@ func TestGenericCSPHandlerWithMetadataObject(t *testing.T) {
 }
 
 func TestGenericCSPHandlerMultipleTypeStatusCode(t *testing.T) {
-	statusCodeValues := []interface{}{"200", 200}
+	statusCodeValues := []any{"200", 200}
 
 	for _, statusCode := range statusCodeValues {
 		t.Run(fmt.Sprintf("%T", statusCode), func(t *testing.T) {

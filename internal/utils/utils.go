@@ -7,21 +7,18 @@ import (
 	"strings"
 )
 
-func TrimEmptyAndComments(s []string) []string {
-	var r []string
-	for _, str := range s {
-		str = strings.TrimSpace(str)
-		if str == "" {
+// ParseFilterList returns the entries of a filter file, one per line,
+// skipping blank lines and # comments.
+func ParseFilterList(content string) []string {
+	var entries []string
+	for line := range strings.Lines(content) {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-
-		if strings.HasPrefix(str, "#") {
-			continue
-		}
-
-		r = append(r, str)
+		entries = append(entries, line)
 	}
-	return r
+	return entries
 }
 
 func TruncateQueryStringFragment(uri string) string {
@@ -67,11 +64,4 @@ func GetClientIP(r *http.Request) (netip.Addr, error) {
 	}
 
 	return addrp.Addr(), nil
-}
-
-func Ternary(condition bool, trueValue, falseValue string) string {
-	if condition {
-		return trueValue
-	}
-	return falseValue
 }

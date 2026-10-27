@@ -68,18 +68,18 @@ func (r CSPReport) ReportType() string { return "csp-violation" }
 // CSPReportBody contains the fields that are nested within the
 // violation report.
 type CSPReportBody struct {
-	DocumentURI        string      `json:"document-uri"`
-	Referrer           string      `json:"referrer"`
-	BlockedURI         string      `json:"blocked-uri"`
-	ViolatedDirective  string      `json:"violated-directive"`
-	EffectiveDirective string      `json:"effective-directive"`
-	OriginalPolicy     string      `json:"original-policy"`
-	Disposition        string      `json:"disposition"`
-	ScriptSample       string      `json:"script-sample"`
-	StatusCode         interface{} `json:"status-code"`
-	SourceFile         string      `json:"source-file"`
-	LineNumber         uint32      `json:"line-number"`
-	ColumnNumber       uint32      `json:"column-number"`
+	DocumentURI        string `json:"document-uri"`
+	Referrer           string `json:"referrer"`
+	BlockedURI         string `json:"blocked-uri"`
+	ViolatedDirective  string `json:"violated-directive"`
+	EffectiveDirective string `json:"effective-directive"`
+	OriginalPolicy     string `json:"original-policy"`
+	Disposition        string `json:"disposition"`
+	ScriptSample       string `json:"script-sample"`
+	StatusCode         any    `json:"status-code"`
+	SourceFile         string `json:"source-file"`
+	LineNumber         uint32 `json:"line-number"`
+	ColumnNumber       uint32 `json:"column-number"`
 }
 
 // NewCSPHandler builds the legacy report-uri CSP handler on BatchReportHandler.

@@ -1,9 +1,8 @@
 package handler
 
 import (
+	"cmp"
 	"net/http"
-
-	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 )
 
 type ReportAPIReport struct {
@@ -81,15 +80,11 @@ func setCORSResponseHeaders(w http.ResponseWriter, _ *http.Request) {
 func ReportAPICorsHandler(w http.ResponseWriter, r *http.Request) {
 	setCORSResponseHeaders(w, r)
 
-	method := r.Header.Get("Access-Control-Request-Method")
-	header := r.Header.Get("Access-Control-Request-Headers")
-	allow_method := utils.Ternary(method != "", method, "*")
-	allow_header := utils.Ternary(header != "", header, "*")
 	// Special handling due to bug in Chrome
 	// https://bugs.chromium.org/p/chromium/issues/detail?id=1152867
-	w.Header().Set("Access-Control-Allow-Methods", allow_method)
+	w.Header().Set("Access-Control-Allow-Methods", cmp.Or(r.Header.Get("Access-Control-Request-Method"), "*"))
 	w.Header().Set("Access-Control-Max-Age", "60")
-	w.Header().Set("Access-Control-Allow-Headers", allow_header)
+	w.Header().Set("Access-Control-Allow-Headers", cmp.Or(r.Header.Get("Access-Control-Request-Headers"), "*"))
 	w.Header().Set("Vary", "Access-Control-Request-Method, Access-Control-Request-Headers")
 
 	w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
