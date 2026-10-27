@@ -10,6 +10,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -596,6 +597,34 @@ func TestParseDomainList(t *testing.T) {
 
 			if got := parseDomainList(tt.content); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("parseDomainList(%q) = %q, want %q", tt.content, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		rev  string
+		info *debug.BuildInfo
+		want string
+	}{
+		{name: "release_build", rev: "0.0.27+c043a85", info: &debug.BuildInfo{Main: debug.Module{Version: "v0.0.27"}}, want: "0.0.27+c043a85"},
+		{name: "go_install", rev: "dev", info: &debug.BuildInfo{Main: debug.Module{Version: "v0.0.27"}}, want: "v0.0.27"},
+		{name: "go_install_pseudo_version", rev: "dev", info: &debug.BuildInfo{Main: debug.Module{Version: "v0.0.28-0.20261027010203-c043a85d5326"}}, want: "v0.0.28-0.20261027010203-c043a85d5326"},
+		{name: "local_build", rev: "dev", info: &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, want: "dev"},
+		{name: "no_module_version", rev: "dev", info: &debug.BuildInfo{}, want: "dev"},
+		{name: "no_build_info", rev: "dev", info: nil, want: "dev"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := buildVersion(tt.rev, tt.info); got != tt.want {
+				t.Errorf("buildVersion(%q, %+v) = %q, want %q", tt.rev, tt.info, got, tt.want)
 			}
 		})
 	}
