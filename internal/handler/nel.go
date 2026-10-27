@@ -14,6 +14,7 @@ type NELReport struct {
 	UserAgent string        `json:"user_agent"`
 }
 
+// ReportType satisfies ReportTyped.
 func (r NELReport) ReportType() string { return r.Type }
 
 // NELReportBody contains the fields nested within each NEL report.

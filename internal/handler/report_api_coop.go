@@ -14,6 +14,7 @@ type COOPReport struct {
 	UserAgent string         `json:"user_agent"`
 }
 
+// ReportType satisfies ReportTyped.
 func (r COOPReport) ReportType() string { return r.Type }
 
 // COOPReportBody holds every field a COOP violation can carry. Which ones

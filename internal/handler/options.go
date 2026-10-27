@@ -28,8 +28,12 @@ type Options struct {
 type ClientIPMode int
 
 const (
+	// ClientIPNone doesn't log the client's address.
 	ClientIPNone ClientIPMode = iota
+
+	// ClientIPFull logs the whole address.
 	ClientIPFull
+
 	// ClientIPTruncated logs only the network: /24 for IPv4, /64 for IPv6.
 	ClientIPTruncated
 )

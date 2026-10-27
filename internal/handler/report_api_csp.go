@@ -5,6 +5,8 @@ import (
 	"net/http"
 )
 
+// ReportAPIReport is a CSP violation delivered by the Reporting API, for
+// policies that name an endpoint with report-to.
 type ReportAPIReport struct {
 	Age       int                `json:"age"`
 	Body      ReportAPIViolation `json:"body"`
@@ -13,8 +15,10 @@ type ReportAPIReport struct {
 	UserAgent string             `json:"user_agent"`
 }
 
+// ReportType satisfies ReportTyped.
 func (r ReportAPIReport) ReportType() string { return r.Type }
 
+// ReportAPIViolation is the body of a ReportAPIReport.
 type ReportAPIViolation struct {
 	BlockedURL         string `json:"blockedURL"`
 	ColumnNumber       int    `json:"columnNumber,omitempty"`
@@ -77,6 +81,8 @@ func setCORSResponseHeaders(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 }
 
+// ReportAPICorsHandler answers the CORS preflight a browser sends before
+// uploading reports to a different origin.
 func ReportAPICorsHandler(w http.ResponseWriter, r *http.Request) {
 	setCORSResponseHeaders(w, r)
 
