@@ -135,7 +135,7 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	items, err := h.decode(http.MaxBytesReader(w, r.Body, maxBodyBytes), r)
 	var maxErr *http.MaxBytesError
 	if errors.As(err, &maxErr) {
 		h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "body_too_large").Inc()
@@ -143,14 +143,6 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 		h.Logger.Debug("request body exceeds the size limit", "limit_bytes", maxBodyBytes)
 		return
 	}
-	if err != nil {
-		h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "decode_error").Inc()
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.Logger.Debug("unable to read request body", "error", err)
-		return
-	}
-
-	items, err := h.decode(body, r)
 	if err != nil {
 		h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "decode_error").Inc()
 		w.WriteHeader(http.StatusUnprocessableEntity)
@@ -204,22 +196,38 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 // decode returns an error only when the body as a whole can't be decoded.
 // In batch mode a malformed item is counted and skipped, so one bad report
 // doesn't drop the well-formed ones sent alongside it.
-func (h *BatchReportHandler[T]) decode(body []byte, r *http.Request) ([]T, error) {
+//
+// The body is decoded as it's read, one report at a time, rather than read
+// whole first. A full batch then costs about its own size in memory instead
+// of several times it, which matters because the endpoints are public.
+// Nothing is logged until the whole body has decoded, so a body that breaks
+// partway through is still rejected as a whole.
+func (h *BatchReportHandler[T]) decode(body io.Reader, r *http.Request) ([]T, error) {
+	dec := json.NewDecoder(body)
+
 	if h.SingleObject {
 		var item T
-		if err := json.Unmarshal(body, &item); err != nil {
+		if err := dec.Decode(&item); err != nil {
+			return nil, err
+		}
+		if err := expectEOF(dec); err != nil {
 			return nil, err
 		}
 		return []T{item}, nil
 	}
 
-	var rawItems []json.RawMessage
-	if err := json.Unmarshal(body, &rawItems); err != nil {
+	if tok, err := dec.Token(); err != nil {
 		return nil, err
+	} else if tok != json.Delim('[') {
+		return nil, fmt.Errorf("expected an array of reports, got %v", tok)
 	}
 
 	var items []T
-	for _, raw := range rawItems {
+	var raw json.RawMessage
+	for dec.More() {
+		if err := dec.Decode(&raw); err != nil {
+			return nil, err
+		}
 		var item T
 		if err := json.Unmarshal(raw, &item); err != nil {
 			h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "item_decode_error").Inc()
@@ -232,7 +240,28 @@ func (h *BatchReportHandler[T]) decode(body []byte, r *http.Request) ([]T, error
 		}
 		items = append(items, item)
 	}
+
+	// The closing bracket.
+	if _, err := dec.Token(); err != nil {
+		return nil, err
+	}
+	if err := expectEOF(dec); err != nil {
+		return nil, err
+	}
 	return items, nil
+}
+
+// expectEOF rejects anything after the top-level value, which a decoder
+// otherwise leaves unread.
+func expectEOF(dec *json.Decoder) error {
+	tok, err := dec.Token()
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("unexpected %v after the report", tok)
 }
 
 // truncateURLFields strips the query string and fragment from each named
