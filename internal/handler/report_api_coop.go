@@ -1,9 +1,7 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 )
 
 // COOPReport is a Cross-Origin-Opener-Policy violation delivered by the
@@ -50,14 +48,11 @@ func NewReportAPICOOPHandler(opts Options) http.Handler {
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
-		Validate: func(report COOPReport) (string, error) {
-			if !strings.HasPrefix(report.URL, "http") {
-				return "validation_error", fmt.Errorf("url ('%s') is invalid", report.URL)
-			}
-			return "", nil
+		Validate: func(report COOPReport) *Rejection {
+			return requireHTTPURL("url", report.URL)
 		},
 
-		Process: func(report COOPReport, r *http.Request, metadata interface{}) ProcessResult {
+		Process: func(report COOPReport) ProcessResult {
 			// COOP's report-only disposition is "reporting", unlike CSP's "report".
 			reportOnly := report.Body.Disposition == "reporting"
 			lf := Fields{
@@ -77,8 +72,6 @@ func NewReportAPICOOPHandler(opts Options) http.Handler {
 				"source_file":           report.Body.SourceFile,
 				"line_number":           report.Body.LineNumber,
 				"column_number":         report.Body.ColumnNumber,
-				"metadata":              metadata,
-				"path":                  r.URL.Path,
 			}
 
 			if opts.TruncateQueryStringFragment {
@@ -86,12 +79,7 @@ func NewReportAPICOOPHandler(opts Options) http.Handler {
 					"opener_url", "openee_url", "initial_popup_url", "other_document_url", "source_file")
 			}
 
-			mode := "enforced"
-			if reportOnly {
-				mode = "report_only"
-			}
-
-			return ProcessResult{Fields: lf, Mode: mode}
+			return ProcessResult{Fields: lf, Mode: modeLabel(reportOnly)}
 		},
 	}
 }

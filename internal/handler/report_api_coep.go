@@ -1,9 +1,7 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 )
 
 // COEPReport is a Cross-Origin-Embedder-Policy violation delivered by the
@@ -36,14 +34,11 @@ func NewReportAPICOEPHandler(opts Options) http.Handler {
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
-		Validate: func(report COEPReport) (string, error) {
-			if !strings.HasPrefix(report.URL, "http") {
-				return "validation_error", fmt.Errorf("url ('%s') is invalid", report.URL)
-			}
-			return "", nil
+		Validate: func(report COEPReport) *Rejection {
+			return requireHTTPURL("url", report.URL)
 		},
 
-		Process: func(report COEPReport, r *http.Request, metadata interface{}) ProcessResult {
+		Process: func(report COEPReport) ProcessResult {
 			// COEP's report-only disposition is "reporting", unlike CSP's "report".
 			reportOnly := report.Body.Disposition == "reporting"
 			lf := Fields{
@@ -53,20 +48,13 @@ func NewReportAPICOEPHandler(opts Options) http.Handler {
 				"blocked_uri": report.Body.BlockedURL,
 				"destination": report.Body.Destination,
 				"disposition": report.Body.Disposition,
-				"metadata":    metadata,
-				"path":        r.URL.Path,
 			}
 
 			if opts.TruncateQueryStringFragment {
 				truncateURLFields(lf, "url", "blocked_uri")
 			}
 
-			mode := "enforced"
-			if reportOnly {
-				mode = "report_only"
-			}
-
-			return ProcessResult{Fields: lf, Mode: mode}
+			return ProcessResult{Fields: lf, Mode: modeLabel(reportOnly)}
 		},
 	}
 }

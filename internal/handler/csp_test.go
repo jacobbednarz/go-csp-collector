@@ -48,7 +48,7 @@ var invalidBlockedURIs = []string{
 }
 
 func newTestCSPHandler(blockedURIs, blockedDomains []string, l *slog.Logger, m *metrics.Metrics) http.Handler {
-	return NewCSPHandler(false, blockedURIs, blockedDomains, Options{Logger: l, Metrics: m})
+	return NewCSPHandler(false, Filter{BlockedURIs: blockedURIs, BlockedDomains: blockedDomains}, Options{Logger: l, Metrics: m})
 }
 
 func TestCSPReportType(t *testing.T) {
@@ -194,7 +194,7 @@ func TestGenericCSPHandlerWithMetadataObject(t *testing.T) {
 	}
 	recorder := httptest.NewRecorder()
 
-	h := NewCSPHandler(false, nil, nil, Options{MetadataObject: true, Logger: l, Metrics: newTestMetrics()})
+	h := NewCSPHandler(false, Filter{}, Options{MetadataObject: true, Logger: l, Metrics: newTestMetrics()})
 	h.ServeHTTP(recorder, request)
 
 	response := recorder.Result()
@@ -480,7 +480,7 @@ func TestGenericCSPHandlerReportOnly(t *testing.T) {
 	m := metrics.New(registry)
 	l, logBuffer := newTestLogger()
 
-	h := NewCSPHandler(true, nil, nil, Options{Logger: l, Metrics: m})
+	h := NewCSPHandler(true, Filter{}, Options{Logger: l, Metrics: m})
 
 	payload := []byte(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/app.js"}}`)
 	req := httptest.NewRequest("POST", "/csp/report-only", bytes.NewBuffer(payload))
@@ -522,7 +522,7 @@ func TestCSPHandlerReportOnlyFromDisposition(t *testing.T) {
 			registry := prometheus.NewRegistry()
 			m := metrics.New(registry)
 			l, rec := newRecordingLogger(slog.LevelInfo)
-			h := NewCSPHandler(tt.routeReportOnly, nil, nil, Options{Logger: l, Metrics: m})
+			h := NewCSPHandler(tt.routeReportOnly, Filter{}, Options{Logger: l, Metrics: m})
 
 			payload := fmt.Sprintf(`{"csp-report":{"document-uri":"https://example.com","blocked-uri":"https://cdn.example.com/app.js","disposition":%q}}`, tt.disposition)
 			req := httptest.NewRequest("POST", "/csp", strings.NewReader(payload))
@@ -552,7 +552,7 @@ func TestCSPHandlerReportOnlyFromDisposition(t *testing.T) {
 func TestGenericCSPHandlerTruncatesQueryStringFragment(t *testing.T) {
 	l, rec := newRecordingLogger(slog.LevelInfo)
 
-	h := NewCSPHandler(false, nil, nil, Options{TruncateQueryStringFragment: true, Logger: l, Metrics: newTestMetrics()})
+	h := NewCSPHandler(false, Filter{}, Options{TruncateQueryStringFragment: true, Logger: l, Metrics: newTestMetrics()})
 
 	payload := []byte(`{"csp-report":{"document-uri":"https://example.com/?a=b#frag","referrer":"https://ref.example.com/?a=b#frag","blocked-uri":"https://cdn.example.com/app.js?a=b#frag","source-file":"https://example.com/app.js?a=b#frag"}}`)
 	req := httptest.NewRequest("POST", "/csp", bytes.NewBuffer(payload))

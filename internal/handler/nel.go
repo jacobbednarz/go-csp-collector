@@ -1,9 +1,7 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 )
@@ -42,11 +40,8 @@ func NewNELHandler(reportOnly bool, opts Options) http.Handler {
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
-		Validate: func(report NELReport) (string, error) {
-			if !strings.HasPrefix(report.URL, "http") {
-				return "validation_error", fmt.Errorf("url ('%s') is invalid", report.URL)
-			}
-			return "", nil
+		Validate: func(report NELReport) *Rejection {
+			return requireHTTPURL("url", report.URL)
 		},
 
 		// NEL also counts in its own nel_reports_total, which is deprecated
@@ -55,21 +50,13 @@ func NewNELHandler(reportOnly bool, opts Options) http.Handler {
 			opts.Metrics.Reports.WithLabelValues("nel", mode).Inc()
 			opts.Metrics.NELReports.WithLabelValues(mode).Inc()
 		},
-		RecordValidationErrorMetric: func(reason string) {
-			opts.Metrics.ReportErrors.WithLabelValues("nel", reason).Inc()
-		},
 
-		Process: func(report NELReport, r *http.Request, metadata interface{}) ProcessResult {
+		Process: func(report NELReport) ProcessResult {
 			url := report.URL
 			referrer := report.Body.Referrer
 			if opts.TruncateQueryStringFragment {
 				url = utils.TruncateQueryStringFragment(url)
 				referrer = utils.TruncateQueryStringFragment(referrer)
-			}
-
-			mode := "enforced"
-			if reportOnly {
-				mode = "report_only"
 			}
 
 			return ProcessResult{
@@ -85,10 +72,8 @@ func NewNELHandler(reportOnly bool, opts Options) http.Handler {
 					"elapsed_time":      report.Body.ElapsedTime,
 					"server_ip":         report.Body.ServerIP,
 					"sampling_fraction": report.Body.SamplingFraction,
-					"metadata":          metadata,
-					"path":              r.URL.Path,
 				},
-				Mode: mode,
+				Mode: modeLabel(reportOnly),
 			}
 		},
 	}

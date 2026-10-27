@@ -24,11 +24,8 @@ type testReport struct {
 
 func (t testReport) ReportType() string { return t.Type }
 
-func passthroughProcess(report testReport, r *http.Request, metadata interface{}) ProcessResult {
-	return ProcessResult{
-		Fields: Fields{"value": report.Value, "metadata": metadata, "path": r.URL.Path},
-		Mode:   "enforced",
-	}
+func passthroughProcess(report testReport) ProcessResult {
+	return ProcessResult{Fields: Fields{"value": report.Value}, Mode: "enforced"}
 }
 
 func TestBatchReportHandlerDisallowedMethod(t *testing.T) {
@@ -315,15 +312,15 @@ func TestBatchReportHandlerExpectedTypeSkipsAndIncrementsIgnored(t *testing.T) {
 	}
 }
 
-func TestBatchReportHandlerValidateRejectsWithDefaultMetric(t *testing.T) {
+func TestBatchReportHandlerValidateRejectedCountsAsError(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
 	h := &BatchReportHandler[testReport]{
 		HandlerName: "test",
 		Process:     passthroughProcess,
-		Validate: func(item testReport) (string, error) {
-			return "some_reason", errors.New("rejected")
+		Validate: func(item testReport) *Rejection {
+			return &Rejection{Reason: "some_reason", Err: errors.New("rejected")}
 		},
 		Options: Options{Logger: l, Metrics: m},
 	}
@@ -336,23 +333,19 @@ func TestBatchReportHandlerValidateRejectsWithDefaultMetric(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("test", "some_reason")); got != 1 {
-		t.Fatalf("reports_errors_total some_reason = %v, want 1 (default fallback metric)", got)
+		t.Fatalf("reports_errors_total some_reason = %v, want 1", got)
 	}
 }
 
-func TestBatchReportHandlerValidateRejectsWithOverrideMetric(t *testing.T) {
+func TestBatchReportHandlerValidateFilteredCountsAsFiltered(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	m := metrics.New(registry)
 	l, _ := newTestLogger()
-	var overrideCalledWith string
 	h := &BatchReportHandler[testReport]{
 		HandlerName: "test",
 		Process:     passthroughProcess,
-		Validate: func(item testReport) (string, error) {
-			return "some_reason", errors.New("rejected")
-		},
-		RecordValidationErrorMetric: func(reason string) {
-			overrideCalledWith = reason
+		Validate: func(item testReport) *Rejection {
+			return &Rejection{Reason: "some_reason", Filtered: true, Err: errors.New("filtered")}
 		},
 		Options: Options{Logger: l, Metrics: m},
 	}
@@ -364,11 +357,11 @@ func TestBatchReportHandlerValidateRejectsWithOverrideMetric(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	if overrideCalledWith != "some_reason" {
-		t.Fatalf("expected RecordValidationErrorMetric to be called with %q, got %q", "some_reason", overrideCalledWith)
+	if got := testutil.ToFloat64(m.ReportFiltered.WithLabelValues("test", "some_reason")); got != 1 {
+		t.Errorf("reports_filtered_total some_reason = %v, want 1", got)
 	}
 	if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("test", "some_reason")); got != 0 {
-		t.Fatalf("reports_errors_total some_reason = %v, want 0 (override should replace the default, not add to it)", got)
+		t.Errorf("reports_errors_total some_reason = %v, want 0, a filtered report isn't an error", got)
 	}
 }
 
@@ -383,11 +376,11 @@ func TestBatchReportHandlerValidateSkipsRejectedItemInBatch(t *testing.T) {
 	h := &BatchReportHandler[testReport]{
 		HandlerName: "test",
 		Process:     passthroughProcess,
-		Validate: func(item testReport) (string, error) {
+		Validate: func(item testReport) *Rejection {
 			if item.Value == "bad" {
-				return "some_reason", errors.New("rejected")
+				return &Rejection{Reason: "some_reason", Err: errors.New("rejected")}
 			}
-			return "", nil
+			return nil
 		},
 		Options: Options{Logger: l, Metrics: m},
 	}
@@ -420,8 +413,8 @@ func TestBatchReportHandlerValidateRejectsSingleObject(t *testing.T) {
 		HandlerName:  "test",
 		SingleObject: true,
 		Process:      passthroughProcess,
-		Validate: func(item testReport) (string, error) {
-			return "some_reason", errors.New("rejected")
+		Validate: func(item testReport) *Rejection {
+			return &Rejection{Reason: "some_reason", Err: errors.New("rejected")}
 		},
 		Options: Options{Logger: l, Metrics: m},
 	}
@@ -612,4 +605,38 @@ func TestBatchReportHandlerLogTruncatedClientIPParseErrorIsNonFatal(t *testing.T
 // inspect them.
 func newTestMetrics() *metrics.Metrics {
 	return metrics.New(prometheus.NewRegistry())
+}
+
+// The address belongs to the request, so a batch from an address that
+// can't be parsed warns once rather than once for every report in it.
+func TestBatchReportHandlerClientIPParseErrorWarnsOncePerRequest(t *testing.T) {
+	l, rec := newRecordingLogger(slog.LevelInfo)
+	h := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{ClientIP: ClientIPFull, Logger: l, Metrics: newTestMetrics()}}
+
+	req := httptest.NewRequest("POST", "/batch", strings.NewReader(`[{"type":"x","value":"one"},{"type":"x","value":"two"}]`))
+	req.RemoteAddr = "not-a-valid-address"
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	want := []logEntry{
+		{
+			Level:   slog.LevelWarn,
+			Message: "unable to parse client ip",
+			Data:    Fields{"error": "unable to parse remote address not-a-valid-address: not an ip:port"},
+		},
+		{Level: slog.LevelInfo, Data: Fields{"value": "one", "metadata": nil, "path": "/batch"}},
+		{Level: slog.LevelInfo, Data: Fields{"value": "two", "metadata": nil, "path": "/batch"}},
+	}
+	got := rec.Entries()
+	for i := range got {
+		if err, ok := got[i].Data["error"].(error); ok {
+			got[i].Data["error"] = err.Error()
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("log entries = %+v, want %+v", got, want)
+	}
 }
