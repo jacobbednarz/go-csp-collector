@@ -2,6 +2,23 @@ apiVersion: v1
 entries:
   csp-collector:
   - apiVersion: v2
+    appVersion: 0.0.27
+    created: "2026-10-27T02:58:26.43510564Z"
+    description: Collector for browser security reports (CSP, NEL, COOP, COEP and
+      other Reporting API reports)
+    digest: 5a9f2bd5ea3eebd271d970621b29ee60c4541377e761d1c53aac86f2703beae7
+    home: https://github.com/jacobbednarz/go-csp-collector
+    maintainers:
+    - name: jacobbednarz
+      url: https://github.com/jacobbednarz
+    name: csp-collector
+    sources:
+    - https://github.com/jacobbednarz/go-csp-collector
+    type: application
+    urls:
+    - https://github.com/jacobbednarz/go-csp-collector/releases/download/csp-collector-0.0.27/csp-collector-0.0.27.tgz
+    version: 0.0.27
+  - apiVersion: v2
     appVersion: 0.0.26
     created: "2026-10-26T23:36:05.812407905Z"
     description: Collector for browser security reports (CSP, NEL, COOP, COEP and
@@ -114,4 +131,4 @@ entries:
     urls:
     - https://github.com/jacobbednarz/go-csp-collector/releases/download/csp-collector-0.0.19/csp-collector-0.0.19.tgz
     version: 0.0.19
-generated: "2026-10-26T23:36:05.811582314Z"
+generated: "2026-10-27T02:58:26.433888348Z"
