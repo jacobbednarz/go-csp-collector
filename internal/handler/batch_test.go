@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -638,5 +640,82 @@ func TestBatchReportHandlerClientIPParseErrorWarnsOncePerRequest(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("log entries = %+v, want %+v", got, want)
+	}
+}
+
+// BenchmarkBatchReportHandlerFullBatch posts the largest batch a browser
+// sends: 100 CSP reports, each repeating a long policy.
+func BenchmarkBatchReportHandlerFullBatch(b *testing.B) {
+	report := ReportAPIReport{
+		Type: "csp-violation",
+		URL:  "https://example.com/",
+		Body: ReportAPIViolation{
+			BlockedURL:     "https://evil.example/x.js",
+			DocumentURL:    "https://example.com/",
+			OriginalPolicy: strings.Repeat("script-src 'self' https://cdn.example.com; ", 750),
+		},
+	}
+	reports := make([]ReportAPIReport, 100)
+	for i := range reports {
+		reports[i] = report
+	}
+	body, err := json.Marshal(reports)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	h := NewReportAPICSPHandler(Filter{}, Options{Logger: slog.New(slog.DiscardHandler), Metrics: newTestMetrics()})
+	b.SetBytes(int64(len(body)))
+	b.ReportAllocs()
+	for b.Loop() {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, httptest.NewRequest("POST", "/reporting-api/csp", bytes.NewReader(body)))
+		if rr.Code != http.StatusOK {
+			b.Fatalf("expected 200, got %d", rr.Code)
+		}
+	}
+}
+
+// Reports are only logged once the whole body has decoded, so a body that
+// breaks partway through logs nothing rather than the reports before the
+// break. A browser retries a failed upload, which would log them twice.
+func TestBatchReportHandlerMalformedBodyLogsNothing(t *testing.T) {
+	tests := []struct {
+		name         string
+		singleObject bool
+		body         string
+	}{
+		{name: "empty", body: ``},
+		{name: "object_not_array", body: `{"type":"x","value":"one"}`},
+		{name: "syntax_error_mid_array", body: `[{"type":"x","value":"one"}, nope]`},
+		{name: "truncated_array", body: `[{"type":"x","value":"one"},`},
+		{name: "unclosed_array", body: `[{"type":"x","value":"one"}`},
+		{name: "data_after_array", body: `[{"type":"x","value":"one"}] trailing`},
+		{name: "second_array", body: `[{"type":"x","value":"one"}][]`},
+		{name: "single_empty", singleObject: true, body: ``},
+		{name: "single_data_after_object", singleObject: true, body: `{"type":"x","value":"one"} trailing`},
+		{name: "single_second_object", singleObject: true, body: `{"type":"x","value":"one"}{}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry := prometheus.NewRegistry()
+			m := metrics.New(registry)
+			l, rec := newRecordingLogger(slog.LevelInfo)
+			h := &BatchReportHandler[testReport]{HandlerName: "test", SingleObject: tt.singleObject, Process: passthroughProcess, Options: Options{Logger: l, Metrics: m}}
+
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, httptest.NewRequest("POST", "/batch", strings.NewReader(tt.body)))
+
+			if rr.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("expected 422, got %d", rr.Code)
+			}
+			if got := rec.Entries(); len(got) != 0 {
+				t.Errorf("expected nothing logged, got %+v", got)
+			}
+			if got := testutil.ToFloat64(m.ReportErrors.WithLabelValues("test", "decode_error")); got != 1 {
+				t.Errorf("reports_errors_total decode_error = %v, want 1", got)
+			}
+		})
 	}
 }
