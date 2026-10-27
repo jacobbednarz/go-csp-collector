@@ -1,9 +1,7 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 )
@@ -33,7 +31,7 @@ type ReportAPIViolation struct {
 }
 
 // NewReportAPICSPHandler builds the reporting-api/csp handler on BatchReportHandler.
-func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, opts Options) http.Handler {
+func NewReportAPICSPHandler(filter Filter, opts Options) http.Handler {
 	return &BatchReportHandler[ReportAPIReport]{
 		HandlerName:  "reporting_api_csp",
 		ExpectedType: "csp-violation",
@@ -41,33 +39,11 @@ func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, opts Options) 
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
-		Validate: func(report ReportAPIReport) (string, error) {
-			for _, value := range blockedURIs {
-				if strings.HasPrefix(report.Body.BlockedURL, value) {
-					return "blocked_uri", fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
-				}
-			}
-			if isBlockedByDomain(report.Body.BlockedURL, blockedDomains) {
-				return "blocked_domain", fmt.Errorf("blocked URI ('%s') is an invalid resource", report.Body.BlockedURL)
-			}
-			if !strings.HasPrefix(report.Body.DocumentURL, "http") {
-				return "validation_error", fmt.Errorf("document URI ('%s') is invalid", report.Body.DocumentURL)
-			}
-			return "", nil
+		Validate: func(report ReportAPIReport) *Rejection {
+			return filter.validate(report.Body.BlockedURL, report.Body.DocumentURL)
 		},
 
-		RecordValidationErrorMetric: func(reason string) {
-			switch reason {
-			case "blocked_uri":
-				opts.Metrics.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_uri").Inc()
-			case "blocked_domain":
-				opts.Metrics.ReportFiltered.WithLabelValues("reporting_api_csp", "blocked_domain").Inc()
-			default:
-				opts.Metrics.ReportErrors.WithLabelValues("reporting_api_csp", "validation_error").Inc()
-			}
-		},
-
-		Process: func(report ReportAPIReport, r *http.Request, metadata interface{}) ProcessResult {
+		Process: func(report ReportAPIReport) ProcessResult {
 			reportOnly := report.Body.Disposition == "report"
 			lf := Fields{
 				"report_only":         reportOnly,
@@ -83,23 +59,13 @@ func NewReportAPICSPHandler(blockedURIs, blockedDomains []string, opts Options) 
 				"source_file":         report.Body.SourceFile,
 				"line_number":         report.Body.LineNumber,
 				"column_number":       report.Body.ColumnNumber,
-				"metadata":            metadata,
-				"path":                r.URL.Path,
 			}
 
 			if opts.TruncateQueryStringFragment {
-				lf["document_uri"] = utils.TruncateQueryStringFragment(report.Body.DocumentURL)
-				lf["referrer"] = utils.TruncateQueryStringFragment(report.Body.Referrer)
-				lf["blocked_uri"] = utils.TruncateQueryStringFragment(report.Body.BlockedURL)
-				lf["source_file"] = utils.TruncateQueryStringFragment(report.Body.SourceFile)
+				truncateURLFields(lf, "document_uri", "referrer", "blocked_uri", "source_file")
 			}
 
-			mode := "enforced"
-			if reportOnly {
-				mode = "report_only"
-			}
-
-			return ProcessResult{Fields: lf, Mode: mode}
+			return ProcessResult{Fields: lf, Mode: modeLabel(reportOnly)}
 		},
 	}
 }

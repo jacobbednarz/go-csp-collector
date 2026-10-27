@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"github.com/jacobbednarz/go-csp-collector/internal/utils"
 )
 
 // isBlockedByDomain returns true when the hostname of blockedURI exactly
@@ -30,6 +28,31 @@ func isBlockedByDomain(blockedURI string, domains []string) bool {
 	}
 
 	return false
+}
+
+// Filter drops CSP reports about resources the operator has chosen to
+// ignore, such as those injected by browser extensions.
+type Filter struct {
+	// BlockedURIs are prefixes of the blocked URI to drop.
+	BlockedURIs []string
+
+	// BlockedDomains drops blocked URIs on these domains and their
+	// subdomains.
+	BlockedDomains []string
+}
+
+// validate checks a CSP report from either delivery mechanism, which name
+// the same fields differently.
+func (f Filter) validate(blockedURI, documentURI string) *Rejection {
+	for _, prefix := range f.BlockedURIs {
+		if strings.HasPrefix(blockedURI, prefix) {
+			return &Rejection{Reason: "blocked_uri", Filtered: true, Err: fmt.Errorf("blocked URI ('%s') is an invalid resource", prefix)}
+		}
+	}
+	if isBlockedByDomain(blockedURI, f.BlockedDomains) {
+		return &Rejection{Reason: "blocked_domain", Filtered: true, Err: fmt.Errorf("blocked URI ('%s') is an invalid resource", blockedURI)}
+	}
+	return requireHTTPURL("document URI", documentURI)
 }
 
 // CSPReport is the payload delivered by CSP2's report-uri directive: a
@@ -60,39 +83,17 @@ type CSPReportBody struct {
 }
 
 // NewCSPHandler builds the legacy report-uri CSP handler on BatchReportHandler.
-func NewCSPHandler(reportOnly bool, blockedURIs, blockedDomains []string, opts Options) http.Handler {
+func NewCSPHandler(reportOnly bool, filter Filter, opts Options) http.Handler {
 	return &BatchReportHandler[CSPReport]{
 		HandlerName:  "csp",
 		SingleObject: true,
 		Options:      opts,
 
-		Validate: func(report CSPReport) (string, error) {
-			for _, value := range blockedURIs {
-				if strings.HasPrefix(report.Body.BlockedURI, value) {
-					return "blocked_uri", fmt.Errorf("blocked URI ('%s') is an invalid resource", value)
-				}
-			}
-			if isBlockedByDomain(report.Body.BlockedURI, blockedDomains) {
-				return "blocked_domain", fmt.Errorf("blocked URI ('%s') is an invalid resource", report.Body.BlockedURI)
-			}
-			if !strings.HasPrefix(report.Body.DocumentURI, "http") {
-				return "validation_error", fmt.Errorf("document URI ('%s') is invalid", report.Body.DocumentURI)
-			}
-			return "", nil
+		Validate: func(report CSPReport) *Rejection {
+			return filter.validate(report.Body.BlockedURI, report.Body.DocumentURI)
 		},
 
-		RecordValidationErrorMetric: func(reason string) {
-			switch reason {
-			case "blocked_uri":
-				opts.Metrics.ReportFiltered.WithLabelValues("csp", "blocked_uri").Inc()
-			case "blocked_domain":
-				opts.Metrics.ReportFiltered.WithLabelValues("csp", "blocked_domain").Inc()
-			default:
-				opts.Metrics.ReportErrors.WithLabelValues("csp", "validation_error").Inc()
-			}
-		},
-
-		Process: func(report CSPReport, r *http.Request, metadata interface{}) ProcessResult {
+		Process: func(report CSPReport) ProcessResult {
 			// The browser knows which header the policy came from, so CSP3's
 			// disposition wins over the route. Browsers that omit it fall
 			// back to the route the report was sent to.
@@ -118,23 +119,13 @@ func NewCSPHandler(reportOnly bool, blockedURIs, blockedDomains []string, opts O
 				"source_file":         report.Body.SourceFile,
 				"line_number":         report.Body.LineNumber,
 				"column_number":       report.Body.ColumnNumber,
-				"metadata":            metadata,
-				"path":                r.URL.Path,
 			}
 
 			if opts.TruncateQueryStringFragment {
-				lf["document_uri"] = utils.TruncateQueryStringFragment(report.Body.DocumentURI)
-				lf["referrer"] = utils.TruncateQueryStringFragment(report.Body.Referrer)
-				lf["blocked_uri"] = utils.TruncateQueryStringFragment(report.Body.BlockedURI)
-				lf["source_file"] = utils.TruncateQueryStringFragment(report.Body.SourceFile)
+				truncateURLFields(lf, "document_uri", "referrer", "blocked_uri", "source_file")
 			}
 
-			mode := "enforced"
-			if reportOnly {
-				mode = "report_only"
-			}
-
-			return ProcessResult{Fields: lf, Mode: mode}
+			return ProcessResult{Fields: lf, Mode: modeLabel(reportOnly)}
 		},
 	}
 }
