@@ -327,6 +327,11 @@ func TestIsBlockedByDomain(t *testing.T) {
 		{"about:blank", false},
 		{"resource://", false},
 		{"chrome-extension://abc", false},
+		// Hostnames are case-insensitive, and a trailing dot names the same
+		// host as a fully qualified name.
+		{"https://GC.Kaspersky-Labs.COM/script.js", true},
+		{"https://kaspersky-labs.com./script.js", true},
+		{"https://gc.kaspersky-labs.com./script.js", true},
 		// Empty domain list edge case handled separately in TestIsBlockedByDomainEmptyList.
 	}
 

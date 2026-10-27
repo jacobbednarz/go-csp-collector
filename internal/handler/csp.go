@@ -10,6 +10,7 @@ import (
 // isBlockedByDomain returns true when the hostname of blockedURI exactly
 // matches domain or is a subdomain of domain (e.g. "foo.example.com" matches
 // "example.com"). The check is an exact suffix comparison, not fuzzy matching.
+// domains must be lowercase without a trailing dot, as parsed at startup.
 func isBlockedByDomain(blockedURI string, domains []string) bool {
 	if len(domains) == 0 {
 		return false
@@ -20,7 +21,9 @@ func isBlockedByDomain(blockedURI string, domains []string) bool {
 		return false
 	}
 
-	host := u.Hostname()
+	// Hostnames are case-insensitive, and a trailing dot names the same host
+	// as a fully qualified name.
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
 	for _, domain := range domains {
 		if host == domain || strings.HasSuffix(host, "."+domain) {
 			return true
@@ -37,7 +40,7 @@ type Filter struct {
 	BlockedURIs []string
 
 	// BlockedDomains drops blocked URIs on these domains and their
-	// subdomains.
+	// subdomains. Each must be lowercase without a trailing dot.
 	BlockedDomains []string
 }
 
