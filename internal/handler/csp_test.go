@@ -307,7 +307,7 @@ func TestGenericCSPHandlerWithSourceFile(t *testing.T) {
 func TestIsBlockedByDomain(t *testing.T) {
 	t.Parallel()
 
-	domains := []string{"kaspersky-labs.com", "example-tracker.com"}
+	domains := map[string]struct{}{"kaspersky-labs.com": {}, "example-tracker.com": {}}
 
 	cases := []struct {
 		blockedURI string
@@ -350,7 +350,7 @@ func TestIsBlockedByDomain(t *testing.T) {
 func TestIsBlockedByDomainEmptyList(t *testing.T) {
 	t.Parallel()
 
-	if isBlockedByDomain("https://example.com/foo", []string{}) {
+	if isBlockedByDomain("https://example.com/foo", map[string]struct{}{}) {
 		t.Error("expected false for empty domain list")
 	}
 	if isBlockedByDomain("https://example.com/foo", nil) {
@@ -675,8 +675,7 @@ func TestCSPHandlerRejectsBodiesThatAreNotASingleReport(t *testing.T) {
 }
 
 // The benchmarks below compare the two filter implementations under equivalent
-// conditions: a 5-entry list where the matching entry is last (worst-case scan)
-// and a no-match case (full scan).
+// conditions: a 5-entry filter and a no-match case.
 
 // BenchmarkBlockedURIsMatch measures prefix filtering when the URI matches the
 // last entry in the list.
@@ -723,14 +722,14 @@ func BenchmarkBlockedURIsNoMatch(b *testing.B) {
 }
 
 // BenchmarkBlockedDomainsMatch measures domain filtering when the hostname
-// matches the last entry in the list.
+// matches an entry in the set.
 func BenchmarkBlockedDomainsMatch(b *testing.B) {
-	domains := []string{
-		"google-analytics.com",
-		"facebook.net",
-		"doubleclick.net",
-		"ads.twitter.com",
-		"kaspersky-labs.com",
+	domains := map[string]struct{}{
+		"google-analytics.com": {},
+		"facebook.net":         {},
+		"doubleclick.net":      {},
+		"ads.twitter.com":      {},
+		"kaspersky-labs.com":   {},
 	}
 	uri := "https://gc.kis.v2.scr.kaspersky-labs.com/some/path"
 
@@ -741,14 +740,14 @@ func BenchmarkBlockedDomainsMatch(b *testing.B) {
 }
 
 // BenchmarkBlockedDomainsNoMatch measures domain filtering when nothing in
-// the list matches, forcing a full scan.
+// the set matches.
 func BenchmarkBlockedDomainsNoMatch(b *testing.B) {
-	domains := []string{
-		"google-analytics.com",
-		"facebook.net",
-		"doubleclick.net",
-		"ads.twitter.com",
-		"kaspersky-labs.com",
+	domains := map[string]struct{}{
+		"google-analytics.com": {},
+		"facebook.net":         {},
+		"doubleclick.net":      {},
+		"ads.twitter.com":      {},
+		"kaspersky-labs.com":   {},
 	}
 	uri := "https://legitimate.example.com/some/path"
 

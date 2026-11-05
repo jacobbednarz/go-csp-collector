@@ -305,10 +305,10 @@ starting point.
 `--filter-domains-file` drops reports whose blocked URI is on a listed domain
 or any subdomain of it. Each line is a bare domain, so `kaspersky-labs.com`
 also matches `gc.kis.v2.scr.kaspersky-labs.com`. Matching ignores case and a
-trailing dot, as hostnames do. See `sample.domainlist.txt` for an example. Each check parses the blocked URI to get its hostname, which
-costs roughly 20–35 times more than a prefix check (~180 ns/op against ~5–8
-ns/op). For high-throughput deployments, prefer `--filter-file` and only use
-domains where you need subdomain matching.
+trailing dot, as hostnames do. See `sample.domainlist.txt` for an example.
+Domain filters are indexed at startup. Each check parses the blocked URI
+and looks up its hostname and parent domains, so lookup work depends on the
+hostname depth rather than the number of configured domains.
 
 Both lists apply only to the CSP routes. Filtered reports are counted in
 `csp_collector_reports_filtered_total`.

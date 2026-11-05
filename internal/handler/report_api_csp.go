@@ -35,6 +35,7 @@ type ReportAPIViolation struct {
 
 // NewReportAPICSPHandler builds the reporting-api/csp handler on BatchReportHandler.
 func NewReportAPICSPHandler(filter Filter, opts Options) http.Handler {
+	validate := filter.validator()
 	return &BatchReportHandler[ReportAPIReport]{
 		HandlerName:  "reporting_api_csp",
 		ExpectedType: "csp-violation",
@@ -43,7 +44,7 @@ func NewReportAPICSPHandler(filter Filter, opts Options) http.Handler {
 		SetResponseHeaders: setCORSResponseHeaders,
 
 		Validate: func(report ReportAPIReport) *Rejection {
-			return filter.validate(report.Body.BlockedURL, report.Body.DocumentURL)
+			return validate(report.Body.BlockedURL, report.Body.DocumentURL)
 		},
 
 		Process: func(report ReportAPIReport) ProcessResult {
