@@ -260,6 +260,34 @@ func TestExitCode(t *testing.T) {
 	}
 }
 
+func TestRunMetricsBindAddress(t *testing.T) {
+	for _, tt := range []struct{ name, host string }{
+		{"ipv4", "127.0.0.1"},
+		{"hostname", "localhost"},
+		{"ipv6", "::1"},
+		{"bracketed_ipv6", "[::1]"},
+		{"all_interfaces", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			host := tt.host
+			if host == "::1" || host == "[::1]" {
+				ln, err := net.Listen("tcp6", "[::1]:0")
+				if err != nil {
+					t.Skipf("IPv6 loopback unavailable: %v", err)
+				}
+				_ = ln.Close()
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			var stdout, stderr bytes.Buffer
+			err := run(ctx, []string{"--port", "0", "--metrics-port", "0", "--metrics-bind-addr", host}, &stdout, &stderr)
+			if err != nil {
+				t.Fatalf("run() = %v, stderr = %s", err, &stderr)
+			}
+		})
+	}
+}
+
 func TestRunPreservesFileErrors(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing.txt")
 	for _, flag := range []string{"--filter-file", "--filter-domains-file"} {
