@@ -259,3 +259,37 @@ func TestExitCode(t *testing.T) {
 		})
 	}
 }
+
+func TestRunPreservesFileErrors(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.txt")
+	for _, flag := range []string{"--filter-file", "--filter-domains-file"} {
+		t.Run(flag, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			err := run(t.Context(), []string{flag, missing}, &stdout, &stderr)
+			var pathErr *os.PathError
+			if !errors.Is(err, os.ErrNotExist) || !errors.As(err, &pathErr) {
+				t.Fatalf("run() = %v, want a wrapped missing file error", err)
+			}
+		})
+	}
+}
+
+func TestRunPreservesListenerErrors(t *testing.T) {
+	ln, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+	for _, flag := range []string{"--port", "--metrics-port"} {
+		t.Run(flag, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			args := []string{"--port", "0", "--metrics-port", "0", "--metrics-bind-addr", "0.0.0.0", flag, port}
+			err := run(t.Context(), args, &stdout, &stderr)
+			var opErr *net.OpError
+			if !errors.As(err, &opErr) {
+				t.Fatalf("run() = %v, want a wrapped network error", err)
+			}
+		})
+	}
+}
