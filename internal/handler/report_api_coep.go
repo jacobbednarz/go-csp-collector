@@ -36,6 +36,8 @@ func NewReportAPICOEPHandler(opts Options) http.Handler {
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
+		RecordSuccessMetric: reportSuccessMetric(opts.Metrics, "reporting_api_coep", "enforced", "report_only"),
+
 		Validate: func(report COEPReport) *Rejection {
 			return requireHTTPURL("url", report.URL)
 		},

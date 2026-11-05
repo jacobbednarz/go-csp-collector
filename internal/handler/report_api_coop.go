@@ -50,6 +50,8 @@ func NewReportAPICOOPHandler(opts Options) http.Handler {
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
+		RecordSuccessMetric: reportSuccessMetric(opts.Metrics, "reporting_api_coop", "enforced", "report_only"),
+
 		Validate: func(report COOPReport) *Rejection {
 			return requireHTTPURL("url", report.URL)
 		},
