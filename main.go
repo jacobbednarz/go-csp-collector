@@ -115,21 +115,26 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	// Errors go to stderr so they stay visible when stdout, the reports,
 	// is redirected to a file.
 	errLogger := slog.New(newLogHandler(stderr, *outputFormat, level))
-	fail := func(msg string, args ...any) error {
+	fail := func(msg string, cause error, args ...any) error {
+		err := errors.New(msg)
+		if cause != nil {
+			err = fmt.Errorf("%s: %w", msg, cause)
+			args = append(args, "error", cause)
+		}
 		errLogger.Error(msg, args...)
-		return errors.New(msg)
+		return err
 	}
 
 	// Flag parsing stops at the first argument that isn't a flag, so
 	// anything after it would be silently ignored. The image's entrypoint
 	// is the binary, so an old `/csp_collector --flag` command lands here.
 	if fs.NArg() > 0 {
-		return fail("unexpected argument, only flags are accepted", "argument", fs.Arg(0))
+		return fail("unexpected argument, only flags are accepted", nil, "argument", fs.Arg(0))
 	}
 
 	// Both write the same client_ip field, so one would silently win.
 	if *logClientIP && *logTruncatedClientIP {
-		return fail("--log-client-ip and --log-truncated-client-ip can't be combined, pick one")
+		return fail("--log-client-ip and --log-truncated-client-ip can't be combined, pick one", nil)
 	}
 
 	logger.Debug("starting up")
@@ -139,7 +144,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 
 		content, err := os.ReadFile(*blockedURIFile)
 		if err != nil {
-			return fail("unable to read filter list", "path", *blockedURIFile, "error", err)
+			return fail("unable to read filter list", err, "path", *blockedURIFile)
 		}
 		ignoredBlockedURIs = parseFilterList(string(content))
 	} else {
@@ -152,7 +157,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 
 		content, err := os.ReadFile(*blockedDomainFile)
 		if err != nil {
-			return fail("unable to read domain filter list", "path", *blockedDomainFile, "error", err)
+			return fail("unable to read domain filter list", err, "path", *blockedDomainFile)
 		}
 		blockedDomains = parseDomainList(string(content))
 	}
@@ -160,12 +165,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	// The path becomes part of a ServeMux pattern, where braces are
 	// wildcards and a missing leading slash is a panic.
 	if !strings.HasPrefix(*healthCheckPath, "/") || strings.ContainsAny(*healthCheckPath, "{} \t") {
-		return fail("invalid --health-check-path, it must start with / and can't contain spaces or braces", "path", *healthCheckPath)
+		return fail("invalid --health-check-path, it must start with / and can't contain spaces or braces", nil, "path", *healthCheckPath)
 	}
 
 	enabledEndpoints, err := parseEndpoints(*endpoints)
 	if err != nil {
-		return fail("invalid --endpoints value", "error", err)
+		return fail("invalid --endpoints value", err)
 	}
 
 	clientIP := handler.ClientIPNone
@@ -202,12 +207,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	// at startup instead of from inside a goroutine.
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", *listenPort))
 	if err != nil {
-		return fail("unable to listen for reports", "error", err)
+		return fail("unable to listen for reports", err)
 	}
 	metricsLn, err := net.Listen("tcp", fmt.Sprintf("%s:%d", *metricsBindAddr, *metricsPort))
 	if err != nil {
 		_ = ln.Close()
-		return fail("unable to listen for metrics", "error", err)
+		return fail("unable to listen for metrics", err)
 	}
 
 	metricsMux := http.NewServeMux()
