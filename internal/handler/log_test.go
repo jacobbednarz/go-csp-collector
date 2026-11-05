@@ -8,6 +8,9 @@ import (
 	"testing"
 )
 
+// Fields are the key/value pairs captured from a report log.
+type Fields map[string]any
+
 // newTestLogger returns a logger that writes text at info level, the
 // collector's default, into the returned buffer.
 func newTestLogger() (*slog.Logger, *bytes.Buffer) {

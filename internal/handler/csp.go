@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -108,27 +109,31 @@ func NewCSPHandler(reportOnly bool, filter Filter, opts Options) http.Handler {
 				reportOnly = false
 			}
 
-			lf := Fields{
-				"report_only":         reportOnly,
-				"document_uri":        report.Body.DocumentURI,
-				"referrer":            report.Body.Referrer,
-				"blocked_uri":         report.Body.BlockedURI,
-				"violated_directive":  report.Body.ViolatedDirective,
-				"effective_directive": report.Body.EffectiveDirective,
-				"original_policy":     report.Body.OriginalPolicy,
-				"disposition":         report.Body.Disposition,
-				"script_sample":       report.Body.ScriptSample,
-				"status_code":         report.Body.StatusCode,
-				"source_file":         report.Body.SourceFile,
-				"line_number":         report.Body.LineNumber,
-				"column_number":       report.Body.ColumnNumber,
-			}
-
 			if opts.TruncateQueryStringFragment {
-				truncateURLFields(lf, "document_uri", "referrer", "blocked_uri", "source_file")
+				report.Body.DocumentURI = truncateQueryStringFragment(report.Body.DocumentURI)
+				report.Body.Referrer = truncateQueryStringFragment(report.Body.Referrer)
+				report.Body.BlockedURI = truncateQueryStringFragment(report.Body.BlockedURI)
+				report.Body.SourceFile = truncateQueryStringFragment(report.Body.SourceFile)
 			}
 
-			return ProcessResult{Fields: lf, Mode: modeLabel(reportOnly)}
+			attrs := make([]slog.Attr, 0, 13+maxRequestAttrs)
+			attrs = append(attrs,
+				slog.String("blocked_uri", report.Body.BlockedURI),
+				slog.Uint64("column_number", uint64(report.Body.ColumnNumber)),
+				slog.String("disposition", report.Body.Disposition),
+				slog.String("document_uri", report.Body.DocumentURI),
+				slog.String("effective_directive", report.Body.EffectiveDirective),
+				slog.Uint64("line_number", uint64(report.Body.LineNumber)),
+				slog.String("original_policy", report.Body.OriginalPolicy),
+				slog.String("referrer", report.Body.Referrer),
+				slog.Bool("report_only", reportOnly),
+				slog.String("script_sample", report.Body.ScriptSample),
+				slog.String("source_file", report.Body.SourceFile),
+				slog.Any("status_code", report.Body.StatusCode),
+				slog.String("violated_directive", report.Body.ViolatedDirective),
+			)
+
+			return ProcessResult{Attrs: attrs, Mode: modeLabel(reportOnly)}
 		},
 	}
 }

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"slices"
 )
@@ -50,26 +51,25 @@ func NewReportAPIDefaultHandler(opts Options) http.Handler {
 		},
 
 		Process: func(report DefaultReport) ProcessResult {
-			lf := Fields{
-				"type": report.Type,
-				"url":  report.URL,
-			}
+			attrs := make([]slog.Attr, 0, 3+maxRequestAttrs)
 
 			// URLs inside a body of unknown shape can't be found reliably,
 			// so truncation leaves the body out rather than log URLs the
 			// operator asked to have stripped.
 			if opts.TruncateQueryStringFragment {
-				truncateURLFields(lf, "url")
+				report.URL = truncateQueryStringFragment(report.URL)
 			} else {
-				lf["body"] = string(report.Body)
+				attrs = append(attrs, slog.String("body", string(report.Body)))
 			}
+
+			attrs = append(attrs, slog.String("type", report.Type), slog.String("url", report.URL))
 
 			mode := "reporting-api-default"
 			if slices.Contains(knownReportTypes, report.Type) {
 				mode = report.Type
 			}
 
-			return ProcessResult{Fields: lf, Mode: mode}
+			return ProcessResult{Attrs: attrs, Mode: mode}
 		},
 	}
 }

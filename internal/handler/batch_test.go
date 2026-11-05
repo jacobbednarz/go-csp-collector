@@ -28,7 +28,7 @@ type testReport struct {
 func (t testReport) ReportType() string { return t.Type }
 
 func passthroughProcess(report testReport) ProcessResult {
-	return ProcessResult{Fields: Fields{"value": report.Value}, Mode: "enforced"}
+	return ProcessResult{Attrs: []slog.Attr{slog.String("value", report.Value)}, Mode: "enforced"}
 }
 
 func TestBatchReportHandlerDisallowedMethod(t *testing.T) {

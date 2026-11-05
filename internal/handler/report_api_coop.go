@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 )
 
@@ -56,31 +57,39 @@ func NewReportAPICOOPHandler(opts Options) http.Handler {
 		Process: func(report COOPReport) ProcessResult {
 			// COOP's report-only disposition is "reporting", unlike CSP's "report".
 			reportOnly := report.Body.Disposition == "reporting"
-			lf := Fields{
-				"report_only":           reportOnly,
-				"url":                   report.URL,
-				"type":                  report.Body.Type,
-				"disposition":           report.Body.Disposition,
-				"effective_policy":      report.Body.EffectivePolicy,
-				"previous_response_url": report.Body.PreviousResponseURL,
-				"next_response_url":     report.Body.NextResponseURL,
-				"referrer":              report.Body.Referrer,
-				"property":              report.Body.Property,
-				"opener_url":            report.Body.OpenerURL,
-				"openee_url":            report.Body.OpeneeURL,
-				"initial_popup_url":     report.Body.InitialPopupURL,
-				"other_document_url":    report.Body.OtherDocumentURL,
-				"source_file":           report.Body.SourceFile,
-				"line_number":           report.Body.LineNumber,
-				"column_number":         report.Body.ColumnNumber,
-			}
-
 			if opts.TruncateQueryStringFragment {
-				truncateURLFields(lf, "url", "previous_response_url", "next_response_url", "referrer",
-					"opener_url", "openee_url", "initial_popup_url", "other_document_url", "source_file")
+				report.URL = truncateQueryStringFragment(report.URL)
+				report.Body.PreviousResponseURL = truncateQueryStringFragment(report.Body.PreviousResponseURL)
+				report.Body.NextResponseURL = truncateQueryStringFragment(report.Body.NextResponseURL)
+				report.Body.Referrer = truncateQueryStringFragment(report.Body.Referrer)
+				report.Body.OpenerURL = truncateQueryStringFragment(report.Body.OpenerURL)
+				report.Body.OpeneeURL = truncateQueryStringFragment(report.Body.OpeneeURL)
+				report.Body.InitialPopupURL = truncateQueryStringFragment(report.Body.InitialPopupURL)
+				report.Body.OtherDocumentURL = truncateQueryStringFragment(report.Body.OtherDocumentURL)
+				report.Body.SourceFile = truncateQueryStringFragment(report.Body.SourceFile)
 			}
 
-			return ProcessResult{Fields: lf, Mode: modeLabel(reportOnly)}
+			attrs := make([]slog.Attr, 0, 16+maxRequestAttrs)
+			attrs = append(attrs,
+				slog.Int("column_number", report.Body.ColumnNumber),
+				slog.String("disposition", report.Body.Disposition),
+				slog.String("effective_policy", report.Body.EffectivePolicy),
+				slog.String("initial_popup_url", report.Body.InitialPopupURL),
+				slog.Int("line_number", report.Body.LineNumber),
+				slog.String("next_response_url", report.Body.NextResponseURL),
+				slog.String("openee_url", report.Body.OpeneeURL),
+				slog.String("opener_url", report.Body.OpenerURL),
+				slog.String("other_document_url", report.Body.OtherDocumentURL),
+				slog.String("previous_response_url", report.Body.PreviousResponseURL),
+				slog.String("property", report.Body.Property),
+				slog.String("referrer", report.Body.Referrer),
+				slog.Bool("report_only", reportOnly),
+				slog.String("source_file", report.Body.SourceFile),
+				slog.String("type", report.Body.Type),
+				slog.String("url", report.URL),
+			)
+
+			return ProcessResult{Attrs: attrs, Mode: modeLabel(reportOnly)}
 		},
 	}
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 )
 
@@ -51,25 +52,27 @@ func NewNELHandler(reportOnly bool, opts Options) http.Handler {
 		},
 
 		Process: func(report NELReport) ProcessResult {
-			lf := Fields{
-				"report_only":       reportOnly,
-				"url":               report.URL,
-				"referrer":          report.Body.Referrer,
-				"type":              report.Body.Type,
-				"phase":             report.Body.Phase,
-				"protocol":          report.Body.Protocol,
-				"method":            report.Body.Method,
-				"status_code":       report.Body.StatusCode,
-				"elapsed_time":      report.Body.ElapsedTime,
-				"server_ip":         report.Body.ServerIP,
-				"sampling_fraction": report.Body.SamplingFraction,
-			}
-
 			if opts.TruncateQueryStringFragment {
-				truncateURLFields(lf, "url", "referrer")
+				report.URL = truncateQueryStringFragment(report.URL)
+				report.Body.Referrer = truncateQueryStringFragment(report.Body.Referrer)
 			}
 
-			return ProcessResult{Fields: lf, Mode: modeLabel(reportOnly)}
+			attrs := make([]slog.Attr, 0, 11+maxRequestAttrs)
+			attrs = append(attrs,
+				slog.Int("elapsed_time", report.Body.ElapsedTime),
+				slog.String("method", report.Body.Method),
+				slog.String("phase", report.Body.Phase),
+				slog.String("protocol", report.Body.Protocol),
+				slog.String("referrer", report.Body.Referrer),
+				slog.Bool("report_only", reportOnly),
+				slog.Float64("sampling_fraction", report.Body.SamplingFraction),
+				slog.String("server_ip", report.Body.ServerIP),
+				slog.Int("status_code", report.Body.StatusCode),
+				slog.String("type", report.Body.Type),
+				slog.String("url", report.URL),
+			)
+
+			return ProcessResult{Attrs: attrs, Mode: modeLabel(reportOnly)}
 		},
 	}
 }
