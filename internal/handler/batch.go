@@ -22,29 +22,24 @@ type ReportTyped interface {
 	ReportType() string
 }
 
-// Fields are the key/value pairs logged for one report.
-type Fields map[string]any
-
-// attrs returns the fields sorted by key, so every report logs its fields
-// in the same order.
-func (f Fields) attrs() []slog.Attr {
-	keys := make([]string, 0, len(f))
-	for k := range f {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-
-	attrs := make([]slog.Attr, 0, len(keys))
-	for _, k := range keys {
-		attrs = append(attrs, slog.Any(k, f[k]))
-	}
-	return attrs
-}
+const maxRequestAttrs = 3
 
 // ProcessResult is what Process returns for one successfully decoded report.
 type ProcessResult struct {
-	Fields Fields
-	Mode   string // second Prometheus label, e.g. "enforced" / "report_only"
+	// Attrs must be sorted by key to preserve the report log format.
+	Attrs []slog.Attr
+	Mode  string // second Prometheus label, e.g. "enforced" / "report_only"
+}
+
+func (r ProcessResult) attrs(requestAttrs []slog.Attr) []slog.Attr {
+	attrs := r.Attrs
+	for _, attr := range requestAttrs {
+		i, _ := slices.BinarySearchFunc(attrs, attr.Key, func(a slog.Attr, key string) int {
+			return strings.Compare(a.Key, key)
+		})
+		attrs = slices.Insert(attrs, i, attr)
+	}
+	return attrs
 }
 
 // modeLabel is the metrics mode for a report that's either report-only or
@@ -105,9 +100,9 @@ type BatchReportHandler[T ReportTyped] struct {
 	// is a 400.
 	Validate func(report T) *Rejection
 
-	// Process turns one decoded, type-matched report into log fields and a
+	// Process turns one decoded, type-matched report into log attributes and a
 	// metrics mode. Field truncation is the caller's responsibility. The
-	// fields that come from the request rather than the report (metadata,
+	// attributes that come from the request rather than the report (metadata,
 	// path and client_ip) are added afterwards.
 	Process func(report T) ProcessResult
 
@@ -150,6 +145,10 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 
 	metadata := h.metadata(r)
 	clientIP := h.clientIP(r)
+	requestAttrs := []slog.Attr{slog.Any("metadata", metadata), slog.String("path", r.URL.Path)}
+	if clientIP != "" {
+		requestAttrs = append(requestAttrs, slog.String("client_ip", clientIP))
+	}
 
 	for _, item := range items {
 		if h.ExpectedType != "" && item.ReportType() != h.ExpectedType {
@@ -174,13 +173,7 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 		}
 
 		result := h.Process(item)
-		result.Fields["metadata"] = metadata
-		result.Fields["path"] = r.URL.Path
-		if clientIP != "" {
-			result.Fields["client_ip"] = clientIP
-		}
-
-		h.Logger.LogAttrs(r.Context(), slog.LevelInfo, "", result.Fields.attrs()...)
+		h.Logger.LogAttrs(r.Context(), slog.LevelInfo, "", result.attrs(requestAttrs)...)
 		if h.RecordSuccessMetric != nil {
 			h.RecordSuccessMetric(result.Mode)
 		} else {
@@ -268,16 +261,6 @@ func truncateQueryStringFragment(uri string) string {
 		return uri[:i]
 	}
 	return uri
-}
-
-// truncateURLFields strips the query string and fragment from each named
-// field, for --truncate-query-fragment.
-func truncateURLFields(fields Fields, keys ...string) {
-	for _, k := range keys {
-		if v, ok := fields[k].(string); ok {
-			fields[k] = truncateQueryStringFragment(v)
-		}
-	}
 }
 
 // metadata is the metadata field logged with every report in r: either

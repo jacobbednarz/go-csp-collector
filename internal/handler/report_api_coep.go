@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 )
 
@@ -42,20 +43,22 @@ func NewReportAPICOEPHandler(opts Options) http.Handler {
 		Process: func(report COEPReport) ProcessResult {
 			// COEP's report-only disposition is "reporting", unlike CSP's "report".
 			reportOnly := report.Body.Disposition == "reporting"
-			lf := Fields{
-				"report_only": reportOnly,
-				"url":         report.URL,
-				"type":        report.Body.Type,
-				"blocked_uri": report.Body.BlockedURL,
-				"destination": report.Body.Destination,
-				"disposition": report.Body.Disposition,
-			}
-
 			if opts.TruncateQueryStringFragment {
-				truncateURLFields(lf, "url", "blocked_uri")
+				report.URL = truncateQueryStringFragment(report.URL)
+				report.Body.BlockedURL = truncateQueryStringFragment(report.Body.BlockedURL)
 			}
 
-			return ProcessResult{Fields: lf, Mode: modeLabel(reportOnly)}
+			attrs := make([]slog.Attr, 0, 6+maxRequestAttrs)
+			attrs = append(attrs,
+				slog.String("blocked_uri", report.Body.BlockedURL),
+				slog.String("destination", report.Body.Destination),
+				slog.String("disposition", report.Body.Disposition),
+				slog.Bool("report_only", reportOnly),
+				slog.String("type", report.Body.Type),
+				slog.String("url", report.URL),
+			)
+
+			return ProcessResult{Attrs: attrs, Mode: modeLabel(reportOnly)}
 		},
 	}
 }
