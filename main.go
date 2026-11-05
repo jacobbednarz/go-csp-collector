@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -195,12 +196,17 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		},
 	})
 
+	metricsHost := *metricsBindAddr
+	if strings.HasPrefix(metricsHost, "[") && strings.HasSuffix(metricsHost, "]") {
+		metricsHost = metricsHost[1 : len(metricsHost)-1]
+	}
+	metricsAddr := net.JoinHostPort(metricsHost, strconv.Itoa(*metricsPort))
 	logger.Debug("configured",
 		"blocked_uris", ignoredBlockedURIs,
 		"blocked_domains", blockedDomains,
 		"endpoints", *endpoints,
 		"port", *listenPort,
-		"metrics_addr", fmt.Sprintf("%s:%d", *metricsBindAddr, *metricsPort),
+		"metrics_addr", metricsAddr,
 	)
 
 	// Bind both listeners up front so a port that's already in use fails
@@ -209,7 +215,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return fail("unable to listen for reports", err)
 	}
-	metricsLn, err := net.Listen("tcp", fmt.Sprintf("%s:%d", *metricsBindAddr, *metricsPort))
+	metricsLn, err := net.Listen("tcp", metricsAddr)
 	if err != nil {
 		_ = ln.Close()
 		return fail("unable to listen for metrics", err)
