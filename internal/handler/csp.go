@@ -12,7 +12,7 @@ import (
 // matches domain or is a subdomain of domain (e.g. "foo.example.com" matches
 // "example.com"). The check is an exact suffix comparison, not fuzzy matching.
 // domains must be lowercase without a trailing dot, as parsed at startup.
-func isBlockedByDomain(blockedURI string, domains []string) bool {
+func isBlockedByDomain(blockedURI string, domains map[string]struct{}) bool {
 	if len(domains) == 0 {
 		return false
 	}
@@ -25,13 +25,16 @@ func isBlockedByDomain(blockedURI string, domains []string) bool {
 	// Hostnames are case-insensitive, and a trailing dot names the same host
 	// as a fully qualified name.
 	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
-	for _, domain := range domains {
-		if host == domain || strings.HasSuffix(host, "."+domain) {
+	for {
+		if _, ok := domains[host]; ok {
 			return true
 		}
+		_, suffix, ok := strings.Cut(host, ".")
+		if !ok {
+			return false
+		}
+		host = suffix
 	}
-
-	return false
 }
 
 // Filter drops CSP reports about resources the operator has chosen to
@@ -45,18 +48,24 @@ type Filter struct {
 	BlockedDomains []string
 }
 
-// validate checks a CSP report from either delivery mechanism, which name
-// the same fields differently.
-func (f Filter) validate(blockedURI, documentURI string) *Rejection {
-	for _, prefix := range f.BlockedURIs {
-		if strings.HasPrefix(blockedURI, prefix) {
-			return &Rejection{Reason: "blocked_uri", Filtered: true, Err: fmt.Errorf("blocked URI ('%s') is an invalid resource", prefix)}
+// validator compiles the domain set once so report processing only checks
+// the hostname and its parent domains.
+func (f Filter) validator() func(blockedURI, documentURI string) *Rejection {
+	domains := make(map[string]struct{}, len(f.BlockedDomains))
+	for _, domain := range f.BlockedDomains {
+		domains[domain] = struct{}{}
+	}
+	return func(blockedURI, documentURI string) *Rejection {
+		for _, prefix := range f.BlockedURIs {
+			if strings.HasPrefix(blockedURI, prefix) {
+				return &Rejection{Reason: "blocked_uri", Filtered: true, Err: fmt.Errorf("blocked URI ('%s') is an invalid resource", prefix)}
+			}
 		}
+		if isBlockedByDomain(blockedURI, domains) {
+			return &Rejection{Reason: "blocked_domain", Filtered: true, Err: fmt.Errorf("blocked URI ('%s') is an invalid resource", blockedURI)}
+		}
+		return requireHTTPURL("document URI", documentURI)
 	}
-	if isBlockedByDomain(blockedURI, f.BlockedDomains) {
-		return &Rejection{Reason: "blocked_domain", Filtered: true, Err: fmt.Errorf("blocked URI ('%s') is an invalid resource", blockedURI)}
-	}
-	return requireHTTPURL("document URI", documentURI)
 }
 
 // CSPReport is the payload delivered by CSP2's report-uri directive: a
@@ -88,13 +97,14 @@ type CSPReportBody struct {
 
 // NewCSPHandler builds the legacy report-uri CSP handler on BatchReportHandler.
 func NewCSPHandler(reportOnly bool, filter Filter, opts Options) http.Handler {
+	validate := filter.validator()
 	return &BatchReportHandler[CSPReport]{
 		HandlerName:  "csp",
 		SingleObject: true,
 		Options:      opts,
 
 		Validate: func(report CSPReport) *Rejection {
-			return filter.validate(report.Body.BlockedURI, report.Body.DocumentURI)
+			return validate(report.Body.BlockedURI, report.Body.DocumentURI)
 		},
 
 		Process: func(report CSPReport) ProcessResult {
