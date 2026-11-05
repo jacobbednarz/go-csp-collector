@@ -92,6 +92,8 @@ func NewCSPHandler(reportOnly bool, filter Filter, opts Options) http.Handler {
 		SingleObject: true,
 		Options:      opts,
 
+		RecordSuccessMetric: reportSuccessMetric(opts.Metrics, "csp", "enforced", "report_only"),
+
 		Validate: func(report CSPReport) *Rejection {
 			return filter.validate(report.Body.BlockedURI, report.Body.DocumentURI)
 		},

@@ -42,6 +42,8 @@ func NewReportAPICSPHandler(filter Filter, opts Options) http.Handler {
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
+		RecordSuccessMetric: reportSuccessMetric(opts.Metrics, "reporting_api_csp", "enforced", "report_only"),
+
 		Validate: func(report ReportAPIReport) *Rejection {
 			return filter.validate(report.Body.BlockedURL, report.Body.DocumentURL)
 		},

@@ -2,6 +2,9 @@ package handler
 
 import (
 	"net/http"
+	"sync"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // NELReport is the structure of a single NEL report as delivered by the
@@ -32,6 +35,13 @@ type NELReportBody struct {
 
 // NewNELHandler builds a NEL report handler on BatchReportHandler.
 func NewNELHandler(reportOnly bool, opts Options) http.Handler {
+	mode := modeLabel(reportOnly)
+	counters := sync.OnceValue(func() [2]prometheus.Counter {
+		return [2]prometheus.Counter{
+			opts.Metrics.Reports.WithLabelValues("nel", mode),
+			opts.Metrics.NELReports.WithLabelValues(mode),
+		}
+	})
 	return &BatchReportHandler[NELReport]{
 		HandlerName:  "nel",
 		ExpectedType: "network-error",
@@ -45,9 +55,10 @@ func NewNELHandler(reportOnly bool, opts Options) http.Handler {
 
 		// NEL also counts in its own nel_reports_total, which is deprecated
 		// and kept until dashboards have moved to reports_total.
-		RecordSuccessMetric: func(mode string) {
-			opts.Metrics.Reports.WithLabelValues("nel", mode).Inc()
-			opts.Metrics.NELReports.WithLabelValues(mode).Inc()
+		RecordSuccessMetric: func(_ string) {
+			counts := counters()
+			counts[0].Inc()
+			counts[1].Inc()
 		},
 
 		Process: func(report NELReport) ProcessResult {

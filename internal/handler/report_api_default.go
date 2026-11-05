@@ -45,6 +45,8 @@ func NewReportAPIDefaultHandler(opts Options) http.Handler {
 
 		SetResponseHeaders: setCORSResponseHeaders,
 
+		RecordSuccessMetric: reportSuccessMetric(opts.Metrics, "reporting_api_default", append([]string{"reporting-api-default"}, knownReportTypes...)...),
+
 		Validate: func(report DefaultReport) *Rejection {
 			return requireHTTPURL("url", report.URL)
 		},
