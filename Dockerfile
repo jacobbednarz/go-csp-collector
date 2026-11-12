@@ -6,7 +6,7 @@ COPY . .
 ARG REVISION=dev
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.Rev=${REVISION}" -o /csp_collector .
 
-FROM alpine:3.24.3
+FROM alpine:3.24.4
 LABEL maintainer="https://github.com/jacobbednarz/go-csp-collector"
 COPY --from=build /csp_collector /
 EXPOSE 8080 9090
