@@ -263,7 +263,7 @@ keep both in one collector and tell them apart in your log aggregation tool.
 | `--filter-file`             | Replaces the built-in CSP blocked URI prefix list with the one in this file. See [Filtering CSP reports](#filtering-csp-reports)                     |
 | `--filter-domains-file`     | Drops CSP reports whose blocked URI is on a domain in this file. See [Filtering CSP reports](#filtering-csp-reports)                                |
 | `--truncate-query-fragment` | Removes query strings and fragments from the URLs in each report before logging, to reduce the chance of logging sensitive data                     |
-| `--log-client-ip`           | Logs the IP delivering the report, or the first address in `X-Forwarded-For` if present. The header is trusted as sent, so only use it behind a proxy that sets it |
+| `--log-client-ip`           | Logs the IP delivering the report, or the first address in `X-Forwarded-For` if present. The header is trusted as sent, and most proxies append to it rather than replace it, so only use it behind a proxy that overwrites it |
 | `--log-truncated-client-ip` | Same as `--log-client-ip`, but truncated to a /24 for IPv4 or a /64 for IPv6. Can't be combined with `--log-client-ip` |
 | `--query-params-metadata`   | Logs every query parameter of the report URL as a map in `metadata`. See [Request metadata](#request-metadata)                                      |
 
@@ -327,6 +327,9 @@ as a map, e.g. `https://collector.example.com/csp?env=production&mode=enforce`
 will result in `"metadata": {"env": "production", "mode": "enforce"}` in JSON
 format, and `metadata="map[env:production mode:enforce]"` in text format.
 
+Metadata is logged with every report in a request, so a query string over
+4 KiB is rejected with `414 URI Too Long`.
+
 ### Output formats
 
 The output format can be controlled by passing `--output-format <type>`
@@ -350,8 +353,10 @@ Prometheus metrics are exposed on a dedicated endpoint:
 
 The Docker image listens for metrics on `0.0.0.0` instead, since `127.0.0.1`
 inside a container can only be reached from the container itself. Publish the
-port to scrape it, e.g. `docker run -p 8080:8080 -p 9090:9090
-jacobbednarz/go-csp-collector`. That default is the image's only argument,
+port to scrape it, e.g. `docker run -p 8080:8080 -p 127.0.0.1:9090:9090
+jacobbednarz/go-csp-collector`. A bare `-p 9090:9090` publishes metrics on
+every host interface, bypassing host firewalls such as ufw, so keep the
+metrics port off the public internet. That default is the image's only argument,
 so if you pass any flags of your own, include `--metrics-bind-addr 0.0.0.0`
 with them.
 
@@ -363,7 +368,7 @@ The collector exports:
 | `csp_collector_nel_reports_total` | Counter | `mode` | **Deprecated**, use `csp_collector_reports_total{handler="nel"}`, which counts the same reports. It will be removed in a future release |
 | `csp_collector_reports_filtered_total` | Counter | `handler`, `reason` | Reports dropped by URI/domain filters |
 | `csp_collector_reports_ignored_total` | Counter | `handler`, `reason` | Reports intentionally ignored (for example unsupported NEL types) |
-| `csp_collector_reports_errors_total` | Counter | `handler`, `type` | Rejected reports: decode or validation failures, or a request body over the 5 MiB limit (`body_too_large`) |
+| `csp_collector_reports_errors_total` | Counter | `handler`, `type` | Rejected reports: decode or validation failures, a request body over the 5 MiB limit (`body_too_large`), a request with more than 1000 reports (`too_many_reports`), or a query string over 4 KiB (`query_too_long`) |
 | `csp_collector_http_request_duration_seconds` | Histogram | `handler`, `route`, `method`, `code` | HTTP request duration for report-ingestion endpoints |
 | `csp_collector_http_requests_in_flight` | Gauge | `handler`, `route` | Active in-flight report-ingestion requests |
 | `go_*` / `process_*` | Various | client-go defaults | Runtime and process health metrics |

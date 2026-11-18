@@ -236,7 +236,7 @@ func TestGenericCSPHandlerMultipleTypeStatusCode(t *testing.T) {
 			csp := CSPReport{
 				CSPReportBody{
 					DocumentURI: "https://example.com",
-					StatusCode:  statusCode,
+					StatusCode:  jsonScalar{statusCode},
 				},
 			}
 

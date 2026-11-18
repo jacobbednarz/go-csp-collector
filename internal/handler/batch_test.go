@@ -302,6 +302,38 @@ func TestBatchReportHandlerItemDecodeErrorLogLevel(t *testing.T) {
 	}
 }
 
+func TestTruncationKeepsRejectedReportURLsOutOfDiagnostics(t *testing.T) {
+	const secret = "private-token"
+	logger, logs := newTestLoggerAtLevel(slog.LevelDebug)
+	h := NewCSPHandler(false, Filter{}, Options{Logger: logger, Metrics: newTestMetrics(), TruncateQueryStringFragment: true})
+	req := httptest.NewRequest(http.MethodPost, "/csp", strings.NewReader(`{"csp-report":{"document-uri":"https://example.com/?token=`+secret+`","blocked-uri":"inline"}}`))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+
+	// A rejected single report includes its URL in the validation error.
+	req = httptest.NewRequest(http.MethodPost, "/csp", strings.NewReader(`{"csp-report":{"document-uri":"invalid?token=`+secret+`","blocked-uri":"inline"}}`))
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("rejected status = %d", w.Code)
+	}
+	if strings.Contains(logs.String()+w.Body.String(), secret) {
+		t.Fatal("rejected report URL leaked into diagnostics")
+	}
+
+	// A malformed batch item is logged at debug level before validation.
+	batch := &BatchReportHandler[testReport]{HandlerName: "test", Process: passthroughProcess, Options: Options{Logger: logger, Metrics: newTestMetrics(), TruncateQueryStringFragment: true}}
+	req = httptest.NewRequest(http.MethodPost, "/batch", strings.NewReader(`[{"type":"https://example.com/?token=`+secret+`","value":123}]`))
+	w = httptest.NewRecorder()
+	batch.ServeHTTP(w, req)
+	if strings.Contains(logs.String(), secret) {
+		t.Fatal("malformed batch item leaked into diagnostics")
+	}
+}
+
 func TestBatchReportHandlerItemDecodeErrorMetric(t *testing.T) {
 	t.Parallel()
 
@@ -688,7 +720,7 @@ func TestBatchReportHandlerClientIPParseErrorWarnsOncePerRequest(t *testing.T) {
 		{
 			Level:   slog.LevelWarn,
 			Message: "unable to parse client ip",
-			Data:    Fields{"error": "unable to parse remote address not-a-valid-address: not an ip:port"},
+			Data:    Fields{"error": "the remote address isn't an IP address and port"},
 		},
 		{Level: slog.LevelInfo, Data: Fields{"value": "one", "metadata": nil, "path": "/batch"}},
 		{Level: slog.LevelInfo, Data: Fields{"value": "two", "metadata": nil, "path": "/batch"}},

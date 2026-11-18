@@ -11,8 +11,7 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
+permissions: {}
 
 env:
   REGISTRY_IMAGE: jacobbednarz/go-csp-collector
@@ -21,10 +20,13 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
+          persist-credentials: false
       - name: Validate release tag
         env:
           TAG: ${{ github.event.inputs.ref || github.ref_name }}
@@ -33,15 +35,18 @@ jobs:
             v*) ;;
             *) echo "release tag must start with v"; exit 1 ;;
           esac
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: "go.mod"
+          cache: false
       - name: Test
         run: go test -v -race ./...
 
   build:
     name: build ${{ matrix.goos }}/${{ matrix.goarch }}
     needs: test
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -63,12 +68,14 @@ jobs:
             runs-on: windows-latest
     runs-on: ${{ matrix.runs-on }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
-      - uses: actions/setup-go@v7
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: "go.mod"
+          cache: false
       - name: Verify native build target
         shell: bash
         run: |
@@ -80,9 +87,9 @@ jobs:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          TAG: ${{ github.event.inputs.ref || github.ref_name }}
         run: |
-          tag="${{ github.event.inputs.ref || github.ref_name }}"
-          version="${tag#v}"
+          version="${TAG#v}"
           revision="${version}+$(git rev-parse --short HEAD)"
           output="go-csp-collector_${version}_${GOOS}_${GOARCH}"
 
@@ -95,7 +102,7 @@ jobs:
             tar -czf "dist/${output}.tar.gz" -C dist "${output}"
           fi
       - name: Upload archive
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: go-csp-collector-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*.tar.gz
@@ -105,12 +112,15 @@ jobs:
     name: publish release
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
+          persist-credentials: false
       - name: Download archives
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: dist
           pattern: go-csp-collector-*
@@ -122,12 +132,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.ref || github.ref_name }}
-        run: gh release create "$TAG" dist/*.tar.gz dist/checksums.txt --title "$TAG" --generate-notes
+        run: gh release create "$TAG" dist/*.tar.gz dist/checksums.txt --title "$TAG" --generate-notes --verify-tag
 
   image-build:
     name: build image ${{ matrix.platform }}
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -138,34 +150,36 @@ jobs:
             artifact: linux-arm64
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
+          persist-credentials: false
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           tags: |
             type=semver,pattern={{version}},value=${{ github.event.inputs.ref || github.ref_name }}
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Login to Docker Hub
-        uses: docker/login-action@v4.8.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Revision
         id: revision
         shell: bash
+        env:
+          TAG: ${{ github.event.inputs.ref || github.ref_name }}
         run: |
-          tag="${{ github.event.inputs.ref || github.ref_name }}"
-          echo "revision=${tag#v}+$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "revision=${TAG#v}+$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: ${{ matrix.platform }}
@@ -173,12 +187,13 @@ jobs:
           build-args: REVISION=${{ steps.revision.outputs.revision }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
       - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           mkdir -p /tmp/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
+          touch "/tmp/digests/${DIGEST#sha256:}"
       - name: Upload digest
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: digest-${{ matrix.artifact }}
           path: /tmp/digests/*
@@ -189,23 +204,24 @@ jobs:
     name: publish image
     needs: image-build
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digest-*
           merge-multiple: true
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           tags: |
             type=semver,pattern={{version}},value=${{ github.event.inputs.ref || github.ref_name }}
       - name: Login to Docker Hub
-        uses: docker/login-action@v4.8.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -214,18 +230,22 @@ jobs:
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
       - name: Inspect image
-        run: docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: docker buildx imagetools inspect "${REGISTRY_IMAGE}:${VERSION}"
 
   release-chart:
     name: publish helm chart
     needs: image-merge
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
           fetch-depth: 0
-      - uses: azure/setup-helm@v5
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
       - name: Configure Git
         run: |
           git config user.name "$GITHUB_ACTOR"
@@ -244,9 +264,11 @@ jobs:
             --app-version "$version"
       - name: Install chart-releaser
         env:
-          CR_VERSION: v1.7.0
+          CR_VERSION: v1.10.1
+          CR_SHA256: ce46baf9975d10193b7070b2b7406750c3f664181e36df3f3bbb4a00be40dc1b
         run: |
-          curl -sSLo cr.tar.gz "https://github.com/helm/chart-releaser/releases/download/${CR_VERSION}/chart-releaser_${CR_VERSION#v}_linux_amd64.tar.gz"
+          curl -fsSL --proto '=https' -o cr.tar.gz "https://github.com/helm/chart-releaser/releases/download/${CR_VERSION}/chart-releaser_${CR_VERSION#v}_linux_amd64.tar.gz"
+          echo "${CR_SHA256}  cr.tar.gz" | sha256sum -c -
           tar -xzf cr.tar.gz -C "$RUNNER_TEMP"
           rm cr.tar.gz
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"

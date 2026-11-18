@@ -435,6 +435,7 @@ func TestNewServerSetsTimeouts(t *testing.T) {
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    64 << 10,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("newServer() = %+v, want %+v", got, want)

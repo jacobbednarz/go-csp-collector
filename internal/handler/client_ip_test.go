@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 )
 
@@ -26,6 +27,12 @@ func TestRequestClientIP(t *testing.T) {
 		{name: "forwarded_for_ipv6", remoteAddr: "10.0.0.1:1", forwardedFor: "2001:db8::1, 10.0.0.2", want: "2001:db8::1"},
 		{name: "forwarded_for_invalid", remoteAddr: "10.0.0.1:1", forwardedFor: "unknown, 10.0.0.2", wantErr: true},
 		{name: "remote_addr_invalid", remoteAddr: "not-an-address", wantErr: true},
+		// A zone can be any text, so it would let the sender put whatever
+		// it likes in client_ip.
+		{name: "forwarded_for_zone", remoteAddr: "10.0.0.1:1", forwardedFor: "fe80::1%not-an-ip", want: "fe80::1"},
+		{name: "remote_addr_zone", remoteAddr: "[fe80::1%eth0]:54321", want: "fe80::1"},
+		// An IPv4-mapped address is logged, and truncated, as IPv4.
+		{name: "forwarded_for_ipv4_mapped", remoteAddr: "10.0.0.1:1", forwardedFor: "::ffff:203.0.113.7", want: "203.0.113.7"},
 	}
 
 	for _, tt := range tests {
@@ -52,6 +59,22 @@ func TestRequestClientIP(t *testing.T) {
 				t.Errorf("requestClientIP() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// The error is logged even when only the truncated address is, so it must
+// not repeat the header, which holds the full address.
+func TestRequestClientIPErrorOmitsHeader(t *testing.T) {
+	t.Parallel()
+
+	r := httptest.NewRequest("POST", "/", nil)
+	r.Header.Set("X-Forwarded-For", "203.0.113.7:4711, 10.0.0.2")
+	_, err := requestClientIP(r)
+	if err == nil {
+		t.Fatal("requestClientIP() expected an error")
+	}
+	if strings.Contains(err.Error(), "203.0.113") {
+		t.Errorf("error %q repeats the X-Forwarded-For value", err)
 	}
 }
 
