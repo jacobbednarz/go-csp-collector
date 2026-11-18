@@ -16,6 +16,19 @@ import (
 // limits keep to roughly 32KB, so a real batch stays near 3MB at most.
 const maxBodyBytes = 5 << 20
 
+// maxReportsPerRequest caps how many reports one request can carry. Chrome
+// uploads at most 100 at a time. Without a cap, a body of tiny items such as
+// [{},{},...] decodes into a full report every few bytes, hundreds of times
+// the body's size in memory, and each one is logged with the request's
+// metadata.
+const maxReportsPerRequest = 1000
+
+// maxQueryBytes caps the report URL's query string, since it's logged with
+// every report in the request as metadata.
+const maxQueryBytes = 4 << 10
+
+var errTooManyReports = errors.New("too many reports in one request")
+
 // ReportTyped lets the handler check a decoded item's Reporting API `type`
 // without type-specific code.
 type ReportTyped interface {
@@ -128,12 +141,25 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if len(r.URL.RawQuery) > maxQueryBytes {
+		h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "query_too_long").Inc()
+		w.WriteHeader(http.StatusRequestURITooLong)
+		h.Logger.Debug("request query string exceeds the size limit", "limit_bytes", maxQueryBytes)
+		return
+	}
+
 	items, err := h.decode(http.MaxBytesReader(w, r.Body, maxBodyBytes), r)
 	var maxErr *http.MaxBytesError
 	if errors.As(err, &maxErr) {
 		h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "body_too_large").Inc()
 		w.WriteHeader(http.StatusRequestEntityTooLarge)
 		h.Logger.Debug("request body exceeds the size limit", "limit_bytes", maxBodyBytes)
+		return
+	}
+	if errors.Is(err, errTooManyReports) {
+		h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "too_many_reports").Inc()
+		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		h.Logger.Debug("request holds more reports than the limit", "limit", maxReportsPerRequest)
 		return
 	}
 	if err != nil {
@@ -199,8 +225,9 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 // doesn't drop the well-formed ones sent alongside it.
 //
 // The body is decoded as it's read, one report at a time, rather than read
-// whole first. A full batch then costs about its own size in memory instead
-// of several times it, which matters because the endpoints are public.
+// whole first, and holds at most maxReportsPerRequest items, decodable or
+// not. A full batch then costs about its own size in memory instead of
+// several times it, which matters because the endpoints are public.
 // Nothing is logged until the whole body has decoded, so a body that breaks
 // partway through is still rejected as a whole.
 func (h *BatchReportHandler[T]) decode(body io.Reader, r *http.Request) ([]T, error) {
@@ -225,7 +252,10 @@ func (h *BatchReportHandler[T]) decode(body io.Reader, r *http.Request) ([]T, er
 
 	var items []T
 	var raw json.RawMessage
-	for dec.More() {
+	for n := 0; dec.More(); n++ {
+		if n == maxReportsPerRequest {
+			return nil, errTooManyReports
+		}
 		if err := dec.Decode(&raw); err != nil {
 			return nil, err
 		}

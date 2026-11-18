@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -81,19 +83,42 @@ func (r CSPReport) ReportType() string { return "csp-violation" }
 // CSPReportBody contains the fields that are nested within the
 // violation report.
 type CSPReportBody struct {
-	DocumentURI        string `json:"document-uri"`
-	Referrer           string `json:"referrer"`
-	BlockedURI         string `json:"blocked-uri"`
-	ViolatedDirective  string `json:"violated-directive"`
-	EffectiveDirective string `json:"effective-directive"`
-	OriginalPolicy     string `json:"original-policy"`
-	Disposition        string `json:"disposition"`
-	ScriptSample       string `json:"script-sample"`
-	StatusCode         any    `json:"status-code"`
-	SourceFile         string `json:"source-file"`
-	LineNumber         uint32 `json:"line-number"`
-	ColumnNumber       uint32 `json:"column-number"`
+	DocumentURI        string     `json:"document-uri"`
+	Referrer           string     `json:"referrer"`
+	BlockedURI         string     `json:"blocked-uri"`
+	ViolatedDirective  string     `json:"violated-directive"`
+	EffectiveDirective string     `json:"effective-directive"`
+	OriginalPolicy     string     `json:"original-policy"`
+	Disposition        string     `json:"disposition"`
+	ScriptSample       string     `json:"script-sample"`
+	StatusCode         jsonScalar `json:"status-code"`
+	SourceFile         string     `json:"source-file"`
+	LineNumber         uint32     `json:"line-number"`
+	ColumnNumber       uint32     `json:"column-number"`
 }
+
+// jsonScalar is a JSON number, string, boolean or null, logged as it was
+// sent. CSP's status-code has been sent as both a number and a string, so it
+// can't be a Go number. An object or array is kept as null without being
+// decoded: no browser sends one, and decoding a large one into an any costs
+// many times its size in memory.
+type jsonScalar struct{ value any }
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (s *jsonScalar) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || data[0] == '{' || data[0] == '[' {
+		s.value = nil
+		return nil
+	}
+	return json.Unmarshal(data, &s.value)
+}
+
+// MarshalJSON implements json.Marshaler.
+func (s jsonScalar) MarshalJSON() ([]byte, error) { return json.Marshal(s.value) }
+
+// LogValue implements slog.LogValuer.
+func (s jsonScalar) LogValue() slog.Value { return slog.AnyValue(s.value) }
 
 // NewCSPHandler builds the legacy report-uri CSP handler on BatchReportHandler.
 func NewCSPHandler(reportOnly bool, filter Filter, opts Options) http.Handler {

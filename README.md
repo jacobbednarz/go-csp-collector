@@ -327,6 +327,9 @@ as a map, e.g. `https://collector.example.com/csp?env=production&mode=enforce`
 will result in `"metadata": {"env": "production", "mode": "enforce"}` in JSON
 format, and `metadata="map[env:production mode:enforce]"` in text format.
 
+Metadata is logged with every report in a request, so a query string over
+4 KiB is rejected with `414 URI Too Long`.
+
 ### Output formats
 
 The output format can be controlled by passing `--output-format <type>`
@@ -363,7 +366,7 @@ The collector exports:
 | `csp_collector_nel_reports_total` | Counter | `mode` | **Deprecated**, use `csp_collector_reports_total{handler="nel"}`, which counts the same reports. It will be removed in a future release |
 | `csp_collector_reports_filtered_total` | Counter | `handler`, `reason` | Reports dropped by URI/domain filters |
 | `csp_collector_reports_ignored_total` | Counter | `handler`, `reason` | Reports intentionally ignored (for example unsupported NEL types) |
-| `csp_collector_reports_errors_total` | Counter | `handler`, `type` | Rejected reports: decode or validation failures, or a request body over the 5 MiB limit (`body_too_large`) |
+| `csp_collector_reports_errors_total` | Counter | `handler`, `type` | Rejected reports: decode or validation failures, a request body over the 5 MiB limit (`body_too_large`), a request with more than 1000 reports (`too_many_reports`), or a query string over 4 KiB (`query_too_long`) |
 | `csp_collector_http_request_duration_seconds` | Histogram | `handler`, `route`, `method`, `code` | HTTP request duration for report-ingestion endpoints |
 | `csp_collector_http_requests_in_flight` | Gauge | `handler`, `route` | Active in-flight report-ingestion requests |
 | `go_*` / `process_*` | Various | client-go defaults | Runtime and process health metrics |

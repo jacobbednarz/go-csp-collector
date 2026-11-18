@@ -360,7 +360,9 @@ const shutdownTimeout = 10 * time.Second
 
 // newServer sets timeouts so a slow client can't hold a connection open
 // indefinitely. ReadTimeout leaves room for a full size batch on a slow
-// mobile connection.
+// mobile connection. Report uploads carry few headers, so MaxHeaderBytes is
+// well below Go's 1MB default, which bounds what a request's headers, such
+// as X-Forwarded-For, can add to every report logged from it.
 func newServer(h http.Handler) *http.Server {
 	return &http.Server{
 		Handler:           h,
@@ -368,6 +370,7 @@ func newServer(h http.Handler) *http.Server {
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    64 << 10,
 	}
 }
 
