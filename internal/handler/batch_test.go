@@ -720,7 +720,7 @@ func TestBatchReportHandlerClientIPParseErrorWarnsOncePerRequest(t *testing.T) {
 		{
 			Level:   slog.LevelWarn,
 			Message: "unable to parse client ip",
-			Data:    Fields{"error": "unable to parse remote address not-a-valid-address: not an ip:port"},
+			Data:    Fields{"error": "the remote address isn't an IP address and port"},
 		},
 		{Level: slog.LevelInfo, Data: Fields{"value": "one", "metadata": nil, "path": "/batch"}},
 		{Level: slog.LevelInfo, Data: Fields{"value": "two", "metadata": nil, "path": "/batch"}},
