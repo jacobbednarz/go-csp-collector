@@ -163,9 +163,19 @@ func (h *BatchReportHandler[T]) ServeHTTP(w http.ResponseWriter, r *http.Request
 				} else {
 					h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, rej.Reason).Inc()
 				}
-				h.Logger.Debug("received invalid payload", "error", rej.Err)
+				// Rejection errors can contain report URLs. Do not bypass URL
+				// truncation through diagnostic logs or the HTTP response.
+				if h.TruncateQueryStringFragment {
+					h.Logger.Debug("received invalid payload", "reason", rej.Reason)
+				} else {
+					h.Logger.Debug("received invalid payload", "error", rej.Err)
+				}
 				if h.SingleObject {
-					http.Error(w, rej.Err.Error(), http.StatusBadRequest)
+					if h.TruncateQueryStringFragment {
+						http.Error(w, "invalid report", http.StatusBadRequest)
+					} else {
+						http.Error(w, rej.Err.Error(), http.StatusBadRequest)
+					}
 					return
 				}
 				continue
@@ -222,11 +232,11 @@ func (h *BatchReportHandler[T]) decode(body io.Reader, r *http.Request) ([]T, er
 		var item T
 		if err := json.Unmarshal(raw, &item); err != nil {
 			h.Metrics.ReportErrors.WithLabelValues(h.HandlerName, "item_decode_error").Inc()
-			h.Logger.Debug("skipping a report that couldn't be decoded",
-				"reason", "item_decode_error",
-				"body", string(raw),
-				"path", r.URL.Path,
-			)
+			if h.TruncateQueryStringFragment {
+				h.Logger.Debug("skipping a report that couldn't be decoded", "reason", "item_decode_error", "path", r.URL.Path)
+			} else {
+				h.Logger.Debug("skipping a report that couldn't be decoded", "reason", "item_decode_error", "body", string(raw), "path", r.URL.Path)
+			}
 			continue
 		}
 		items = append(items, item)
