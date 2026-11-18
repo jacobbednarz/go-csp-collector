@@ -101,8 +101,9 @@ affinity: {}
 serviceAccount:
   # Specifies whether a service account should be created
   create: true
-  # Automatically mount a ServiceAccount's API credentials?
-  automount: true
+  # Automatically mount a ServiceAccount's API credentials? The collector
+  # never calls the Kubernetes API, so the token is only useful to an attacker.
+  automount: false
   # Annotations to add to the service account
   annotations: {}
   # The name of the service account to use.

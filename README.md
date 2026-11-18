@@ -353,8 +353,10 @@ Prometheus metrics are exposed on a dedicated endpoint:
 
 The Docker image listens for metrics on `0.0.0.0` instead, since `127.0.0.1`
 inside a container can only be reached from the container itself. Publish the
-port to scrape it, e.g. `docker run -p 8080:8080 -p 9090:9090
-jacobbednarz/go-csp-collector`. That default is the image's only argument,
+port to scrape it, e.g. `docker run -p 8080:8080 -p 127.0.0.1:9090:9090
+jacobbednarz/go-csp-collector`. A bare `-p 9090:9090` publishes metrics on
+every host interface, bypassing host firewalls such as ufw, so keep the
+metrics port off the public internet. That default is the image's only argument,
 so if you pass any flags of your own, include `--metrics-bind-addr 0.0.0.0`
 with them.
 
